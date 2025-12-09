@@ -599,6 +599,7 @@ void info_reset(const struct image* img)
 
     info_update(info_file_name, "%s", img->name);
     info_update(info_file_path, "%s", img->source);
+    setenv("SWAYIMG_CURFILE", img->source, 1);
     if (img->data) {
         info_update(info_file_dir, "%s", img->data->parent);
         info_update(info_image_format, "%s", img->data->format);
