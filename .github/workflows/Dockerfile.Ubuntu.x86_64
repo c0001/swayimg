@@ -1,0 +1,37 @@
+FROM ubuntu:26.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt update && apt upgrade --yes && apt install --no-install-recommends --yes \
+    g++ \
+    meson \
+    wayland-protocols \
+    fonts-dejavu \
+    bash-completion \
+    locales \
+    libavif-dev \
+    libdrm-dev \
+    libexiv2-dev \
+    libfontconfig-dev \
+    libfreetype-dev \
+    libgif-dev \
+    libgtest-dev \
+    libheif-dev \
+    libheif-plugins-all \
+    libjpeg-dev \
+    libjson-c-dev \
+    libjxl-dev \
+    libopenexr-dev \
+    libopenjp2-7-dev \
+    libraw-dev \
+    librsvg2-dev \
+    libsixel-dev \
+    libtiff-dev \
+    libwayland-dev \
+    libwebp-dev \
+    libxkbcommon-dev \
+    libluajit-5.1-dev
+
+RUN locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8
+
+USER ubuntu

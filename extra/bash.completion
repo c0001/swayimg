@@ -3,20 +3,18 @@
 _swayimg()
 {
     local cur=${COMP_WORDS[COMP_CWORD]}
-    local opts="-g --gallery \
-                -l --slideshow \
-                -F --from-file \
-                -r --recursive \
-                -o --order \
-                -s --scale \
-                -f --fullscreen \
-                -p --position \
-                -w --size \
-                -a --class \
-                -i --ipc \
+    local opts="-v --viewer \
+                -g --gallery \
+                -s --slideshow \
+                -f --from-file \
+                -P --position \
+                -S --size \
+                -F --fullscreen \
                 -c --config \
-                -C --config-file \
-                -v --version \
+                -e --execute \
+                   --class \
+                   --verbose \
+                -V --version \
                 -h --help"
     if [[ ${cur} == -* ]]; then
         COMPREPLY=($(compgen -W "${opts}" -- "${cur}"))

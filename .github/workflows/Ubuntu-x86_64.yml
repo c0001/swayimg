@@ -11,7 +11,7 @@ jobs:
     steps:
 
     - name: Check out source code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
@@ -20,7 +20,7 @@ jobs:
       id: version
 
     - name: Build docker image
-      run: docker build --tag=swayimg --file=.github/workflows/Dockerfile.Ubuntu .
+      run: docker build --tag=swayimg --file=.github/workflows/Dockerfile.Ubuntu.x86_64 .
 
     - name: Run docker container
       run: docker run --tty --detach --name=swayimg --volume=$PWD:$PWD:ro --workdir=$PWD swayimg
@@ -30,8 +30,25 @@ jobs:
         docker exec swayimg
         meson setup
         -D version=${{steps.version.outputs.VERSION}}
+        -D compositor=enabled
+        -D wayland=enabled
+        -D drm=enabled
+        -D man=true
+        -D desktop=true
+        -D bash=enabled
+        -D zsh=enabled
+        -D exif=enabled
+        -D exr=auto
+        -D gif=enabled
+        -D heif=enabled
+        -D jpeg=enabled
+        -D jp2=enabled
+        -D jxl=enabled
+        -D raw=enabled
+        -D sixel=enabled
+        -D svg=enabled
+        -D webp=enabled
         -D tests=enabled
-        --auto-features=enabled
         --prefix=/usr
         --werror
         ${{ env.BUILD_PATH }}

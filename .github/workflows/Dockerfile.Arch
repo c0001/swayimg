@@ -3,11 +3,11 @@ FROM archlinux:latest
 RUN pacman --sync --sysupgrade --refresh --refresh --noconfirm \
     bash-completion \
     clang \
+    exiv2 \
     fontconfig \
     gtest \
     libavif \
     libdrm \
-    libexif \
     libheif \
     libjpeg-turbo \
     libjxl \
@@ -17,12 +17,17 @@ RUN pacman --sync --sysupgrade --refresh --refresh --noconfirm \
     libtiff \
     libwebp \
     libxkbcommon \
+    luajit \
     meson \
     openexr \
+    openjpeg2 \
     pkgconf \
-    scdoc \
+    ttf-dejavu \
     wayland \
     wayland-protocols
+
+RUN sed -e 's/^#\(en_US.UTF-8*\)/\1/' -i /etc/locale.gen && locale-gen
+ENV LANG=en_US.UTF-8
 
 RUN useradd --create-home builder
 
