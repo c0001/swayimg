@@ -2,6 +2,7 @@
 // HEIF image format.
 // Copyright (C) 2022 Artem Senichev <artemsen@gmail.com>
 
+#include "../formatfactory.hpp"
 #include "../imageformat.hpp"
 
 #include <libheif/heif.h>
@@ -10,14 +11,16 @@
 #include <memory>
 #include <utility>
 
+namespace {
+
 class ImageFormatHeif : public ImageFormat {
 public:
-    ImageFormatHeif()
+    ImageFormatHeif() noexcept
         : ImageFormat(Priority::Normal, "heif")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (heif_check_filetype(data.data, data.size) !=
             heif_filetype_yes_supported) {
@@ -107,4 +110,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatHeif format_heif;
+ImageFormatHeif format_heif;
+
+} // anonymous namespace

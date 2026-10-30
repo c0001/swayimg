@@ -4,7 +4,9 @@ RUN pacman --sync --sysupgrade --refresh --refresh --noconfirm \
     bash-completion \
     clang \
     exiv2 \
+    ffmpeg \
     fontconfig \
+    gcovr \
     gtest \
     libavif \
     libdrm \
@@ -17,14 +19,18 @@ RUN pacman --sync --sysupgrade --refresh --refresh --noconfirm \
     libtiff \
     libwebp \
     libxkbcommon \
+    llvm \
     luajit \
     meson \
+    minizip-ng \
     openexr \
     openjpeg2 \
+    openmp \
     pkgconf \
     ttf-dejavu \
     wayland \
-    wayland-protocols
+    wayland-protocols \
+    zsh
 
 RUN sed -e 's/^#\(en_US.UTF-8*\)/\1/' -i /etc/locale.gen && locale-gen
 ENV LANG=en_US.UTF-8
@@ -36,8 +42,5 @@ ENV HOME=/home/builder
 
 ENV CC="clang"
 ENV CXX="clang++"
-ENV CFLAGS="-g -fsanitize=address"
-ENV CXXFLAGS="-g -fsanitize=address"
-ENV LDFLAGS="-fsanitize=address -fopenmp=libgomp"
 
 USER builder

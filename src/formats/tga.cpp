@@ -7,14 +7,16 @@
 #include <cstring>
 #include <format>
 
+namespace {
+
 class ImageFormatTga : public ImageFormat {
 public:
-    ImageFormatTga()
+    ImageFormatTga() noexcept
         : ImageFormat(Priority::Lowest, "tga")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (data.size < sizeof(Header)) {
             return nullptr;
@@ -35,7 +37,7 @@ public:
                 if (!has_colormap) {
                     return nullptr;
                 }
-                colormap_sz = tga->cm_size *
+                colormap_sz = static_cast<size_t>(tga->cm_size) *
                     (tga->cm_bpc / 8 + (tga->cm_bpc % 8 ? 1 : 0));
                 colormap = data.data + sizeof(Header) + tga->id_len;
                 break;
@@ -72,6 +74,8 @@ public:
             case TGA_RLE_GS:
                 rc = decode_rle(pm, tga, colormap, pix_ptr, pix_sz);
                 break;
+            default:
+                break;
         }
         if (!rc) {
             return nullptr;
@@ -105,6 +109,8 @@ public:
                 break;
             case TGA_RLE_GS:
                 image->format += "RLE grayscale";
+                break;
+            default:
                 break;
         }
 
@@ -151,7 +157,7 @@ private:
      * @param bpp bits per pixel
      * @return color
      */
-    inline argb_t get_pixel(const uint8_t* data, const size_t bpp) const
+    static argb_t get_pixel(const uint8_t* data, const size_t bpp)
     {
         argb_t pixel;
 
@@ -194,8 +200,9 @@ private:
      * @param size size of image data in bytes
      * @return true if image decoded successfully
      */
-    bool decode_unc(Pixmap& pm, const Header* tga, const uint8_t* colormap,
-                    const uint8_t* data, const size_t size) const
+    static bool decode_unc(Pixmap& pm, const Header* tga,
+                           const uint8_t* colormap, const uint8_t* data,
+                           const size_t size)
     {
         const uint8_t bytes_per_pixel = tga->bpp / 8 + (tga->bpp % 8 ? 1 : 0);
         const size_t num_pixels = pm.width() * pm.height();
@@ -216,7 +223,8 @@ private:
                     if (!colormap) {
                         color = get_pixel(src, tga->bpp);
                     } else {
-                        const uint8_t* entry = colormap + cm_bpp * (*src);
+                        const uint8_t* entry =
+                            colormap + static_cast<ptrdiff_t>(cm_bpp * (*src));
                         if (entry + cm_bpp > data) {
                             return false;
                         }
@@ -240,8 +248,9 @@ private:
      * @param size size of image data in bytes
      * @return true if image decoded successfully
      */
-    bool decode_rle(Pixmap& pm, const Header* tga, const uint8_t* colormap,
-                    const uint8_t* data, const size_t size) const
+    static bool decode_rle(Pixmap& pm, const Header* tga,
+                           const uint8_t* colormap, const uint8_t* data,
+                           const size_t size)
     {
         const uint8_t cm_bpp = tga->cm_bpc / 8 + (tga->cm_bpc % 8 ? 1 : 0);
         const uint8_t bytes_per_pixel = tga->bpp / 8 + (tga->bpp % 8 ? 1 : 0);
@@ -250,11 +259,15 @@ private:
         size_t pos = 0;
 
         while (pixel < pm_end) {
+            if (pos >= size) {
+                return false; // truncated input
+            }
             const uint8_t pack = data[pos++];
             const bool is_rle = (pack & TGA_PACKET_RLE);
             size_t len = (pack & TGA_PACKET_LEN) + 1;
 
-            while (len--) {
+            // packet may be longer than the rest of the pixmap
+            while (len-- && pixel < pm_end) {
                 if (pos + bytes_per_pixel > size) {
                     return false;
                 }
@@ -262,16 +275,15 @@ private:
                 if (!colormap) {
                     *pixel = get_pixel(data + pos, tga->bpp);
                 } else {
-                    const uint8_t* entry = colormap + cm_bpp * data[pos];
+                    const uint8_t* entry =
+                        colormap + static_cast<ptrdiff_t>(cm_bpp * data[pos]);
                     if (entry + cm_bpp > data) {
                         return false;
                     }
                     *pixel = get_pixel(entry, tga->cm_bpc);
                 }
 
-                if (pixel++ >= pm_end) {
-                    break;
-                }
+                ++pixel;
                 if (!is_rle) {
                     pos += bytes_per_pixel;
                 }
@@ -289,7 +301,7 @@ private:
      * @param tga pointer to TGA header
      * @return true if valid
      */
-    bool validate_header(const Header* tga) const
+    static bool validate_header(const Header* tga)
     {
         // check basic image parameters
         if (tga->width == 0 || tga->height == 0) {
@@ -305,12 +317,17 @@ private:
         // check image type
         switch (tga->image_type) {
             case TGA_UNC_CM:
+            case TGA_RLE_CM:
+                // color map entry size must be one that get_pixel() reads
+                return tga->cm_bpc == 8 || tga->cm_bpc == 15 ||
+                    tga->cm_bpc == 16 || tga->cm_bpc == 24 || tga->cm_bpc == 32;
             case TGA_UNC_TC:
             case TGA_UNC_GS:
-            case TGA_RLE_CM:
             case TGA_RLE_TC:
             case TGA_RLE_GS:
                 return true;
+            default:
+                break;
         }
 
         return false;
@@ -318,4 +335,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatTga format_tga;
+ImageFormatTga format_tga;
+
+} // anonymous namespace

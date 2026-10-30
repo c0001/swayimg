@@ -10,6 +10,7 @@ RUN apt update && apt upgrade --yes && apt install --no-install-recommends --yes
     bash-completion \
     qemu-user \
     locales \
+    libavcodec-dev:arm64 libavformat-dev:arm64 libavutil-dev:arm64 libswscale-dev:arm64 \
     libavif-dev:arm64 \
     libdrm-dev:arm64 \
     libexiv2-dev:arm64 \
@@ -20,7 +21,6 @@ RUN apt update && apt upgrade --yes && apt install --no-install-recommends --yes
     libheif-dev:arm64 \
     libheif-plugins-all:arm64 \
     libjpeg-dev:arm64 \
-    libjson-c-dev:arm64 \
     libjxl-dev:arm64 \
     libopenexr-dev:arm64 \
     libopenjp2-7-dev:arm64 \
@@ -31,7 +31,8 @@ RUN apt update && apt upgrade --yes && apt install --no-install-recommends --yes
     libwayland-dev:arm64 \
     libwebp-dev:arm64 \
     libxkbcommon-dev:arm64 \
-    libluajit-5.1-dev:arm64
+    libluajit-5.1-dev:arm64 \
+    libminizip-ng-dev:arm64
 
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8

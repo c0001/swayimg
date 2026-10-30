@@ -6,6 +6,7 @@
 
 #include "application.hpp"
 #include "log.hpp"
+#include "urilist.hpp"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -16,9 +17,8 @@
 #include <cstring>
 #include <format>
 
-// supported MIME types for drag-and-drop
-static const char* MIME_URI_LIST = "text/uri-list";
-static const char* MIME_TEXT_PLAIN = "text/plain";
+// MIME type for drag-and-drop of raw path
+static constexpr const char* MIME_TEXT_PLAIN = "text/plain";
 
 /** Static Wayland handlers. */
 class WaylandHandler {
@@ -35,7 +35,7 @@ public:
                                   struct wl_surface*)
     {
         const UiWayland* ui = reinterpret_cast<UiWayland*>(data);
-        ui->xkb.stop_repeat();
+        ui->xkb.stop_repeat(0);
     }
 
     static void on_keyboard_modifiers(void* data, struct wl_keyboard*, uint32_t,
@@ -68,10 +68,10 @@ public:
     {
         UiWayland* ui = reinterpret_cast<UiWayland*>(data);
 
+        key += 8;
         if (state == WL_KEYBOARD_KEY_STATE_RELEASED) {
-            ui->xkb.stop_repeat();
+            ui->xkb.stop_repeat(key);
         } else if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-            key += 8;
             const xkb_keysym_t keysym = ui->xkb.get_keysym(key);
             if (keysym != XKB_KEY_NoSymbol) {
                 Application::self().add_event(
@@ -93,10 +93,12 @@ public:
     /***************************************************************************
      * Pointer handlers
      **************************************************************************/
-    static void on_pointer_enter(void* data, struct wl_pointer*, uint32_t,
-                                 struct wl_surface*, wl_fixed_t, wl_fixed_t)
+    static void on_pointer_enter(void* data, struct wl_pointer*,
+                                 uint32_t serial, struct wl_surface*,
+                                 wl_fixed_t, wl_fixed_t)
     {
         UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        ui->pointer_serial = serial;
         ui->set_cursor(Ui::CursorShape::Default);
     }
 
@@ -113,8 +115,10 @@ public:
         const double scale =
             static_cast<double>(ui->scale) / UiWayland::FRACTION_SCALE_DEN;
 
-        const Point new_pos { wl_fixed_to_int(surface_x * scale),
-                              wl_fixed_to_int(surface_y * scale) };
+        const Point new_pos {
+            .x = wl_fixed_to_int(surface_x * scale),
+            .y = wl_fixed_to_int(surface_y * scale),
+        };
         const Point delta = new_pos - ui->mouse_pos;
         ui->mouse_pos = new_pos;
 
@@ -123,9 +127,10 @@ public:
         }
 
         Application::self().add_event(AppEvent::MouseMove {
-            { ui->mouse_buttons, ui->xkb.get_modifiers() },
-            ui->mouse_pos,
-            delta
+            .mouse = { .buttons = ui->mouse_buttons,
+                      .mods = ui->xkb.get_modifiers(), },
+            .pointer = ui->mouse_pos,
+            .delta = delta,
         });
     }
 
@@ -145,11 +150,15 @@ public:
             ui->set_cursor(Ui::CursorShape::Default);
         } else {
             ui->mouse_buttons |= btn;
-            const InputMouse input { ui->mouse_buttons,
-                                     ui->xkb.get_modifiers() };
+            const InputMouse input {
+                .buttons = ui->mouse_buttons,
+                .mods = ui->xkb.get_modifiers(),
+            };
             if (ui->dnd != input || !ui->wl.datadev_mgr) {
-                Application::self().add_event(
-                    AppEvent::MouseClick { input, ui->mouse_pos });
+                Application::self().add_event(AppEvent::MouseClick {
+                    .mouse = input,
+                    .pointer = ui->mouse_pos,
+                });
             } else {
                 // start drag-and-drop
                 ui->mouse_buttons = InputMouse();
@@ -166,7 +175,12 @@ public:
                 wl_data_source_add_listener(
                     ui->wl.datasrc, &WaylandHandler::datasrc_listener, ui);
                 wl_data_source_offer(ui->wl.datasrc, MIME_TEXT_PLAIN);
-                wl_data_source_offer(ui->wl.datasrc, MIME_URI_LIST);
+                wl_data_source_offer(ui->wl.datasrc, URI_LIST_MIME);
+                // Offer copy only: with MOVE a file manager can move the
+                // original file out of its directory when the image is
+                // dropped on it, but a viewer must not change its files.
+                wl_data_source_set_actions(
+                    ui->wl.datasrc, WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
                 wl_data_device_start_drag(ui->wl.datadev, ui->wl.datasrc,
                                           ui->wl.surface, nullptr, serial);
             }
@@ -176,21 +190,71 @@ public:
     static void on_pointer_axis(void* data, struct wl_pointer*, uint32_t,
                                 uint32_t axis, wl_fixed_t value)
     {
-        const UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
 
-        InputMouse::mouse_btn_t btn;
-        const bool incr = value > 0;
-        if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
-            btn = incr ? InputMouse::SCROLL_RIGHT : InputMouse::SCROLL_LEFT;
-        } else {
-            btn = incr ? InputMouse::SCROLL_DOWN : InputMouse::SCROLL_UP;
+        if (!ui->scroll_hires) {
+            // approximately correspond to the value120
+            constexpr double factor = 16.0;
+
+            const double delta = wl_fixed_to_double(value) / factor;
+
+            if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
+                ui->scroll_h += delta;
+            } else {
+                ui->scroll_v += delta;
+            }
         }
-        btn |= ui->mouse_buttons;
+    }
 
-        Application::self().add_event(AppEvent::MouseClick {
-            { btn, ui->xkb.get_modifiers() },
-            ui->mouse_pos
-        });
+    static void on_pointer_axis_source(void*, struct wl_pointer*, uint32_t) {}
+
+    static void on_pointer_axis_stop(void*, struct wl_pointer*, uint32_t,
+                                     uint32_t)
+    {
+    }
+
+    static void on_pointer_axis_discrete(void*, struct wl_pointer*, uint32_t,
+                                         int32_t)
+    {
+    }
+
+    static void on_pointer_axis_value120(void* data, struct wl_pointer*,
+                                         uint32_t axis, int32_t value120)
+    {
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        const double delta = value120 / 120.0;
+
+        if (!ui->scroll_hires) {
+            // drop axis distance received before value120 in this frame
+            ui->scroll_hires = true;
+            ui->scroll_h = 0;
+            ui->scroll_v = 0;
+        }
+        if (axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL) {
+            ui->scroll_h += delta;
+        } else {
+            ui->scroll_v += delta;
+        }
+    }
+
+    static void on_pointer_axis_relative_direction(void*, struct wl_pointer*,
+                                                   uint32_t, uint32_t)
+    {
+    }
+
+    static void on_pointer_frame(void* data, struct wl_pointer*)
+    {
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        if (ui->scroll_h || ui->scroll_v) {
+            Application::self().add_event(AppEvent::Scroll {
+                .kmods = ui->xkb.get_modifiers(),
+                .delta_h = ui->scroll_h,
+                .delta_v = ui->scroll_v,
+            });
+            ui->scroll_hires = false;
+            ui->scroll_h = 0;
+            ui->scroll_v = 0;
+        }
     }
 
     static constexpr const wl_pointer_listener pointer_listener = {
@@ -199,12 +263,15 @@ public:
         .motion = on_pointer_motion,
         .button = on_pointer_button,
         .axis = on_pointer_axis,
-        .frame = nullptr,
-        .axis_source = nullptr,
-        .axis_stop = nullptr,
-        .axis_discrete = nullptr,
-        .axis_value120 = nullptr,
-        .axis_relative_direction = nullptr,
+        .frame = on_pointer_frame,
+        .axis_source = on_pointer_axis_source,
+        .axis_stop = on_pointer_axis_stop,
+        .axis_discrete = on_pointer_axis_discrete,
+        .axis_value120 = on_pointer_axis_value120,
+        .axis_relative_direction = on_pointer_axis_relative_direction,
+#ifdef WL_POINTER_WARP_SINCE_VERSION
+        .warp = nullptr,
+#endif
     };
 
     /***************************************************************************
@@ -237,9 +304,9 @@ public:
                                         window.height)) {
                 return;
             }
-            Application::self().add_event(
-                AppEvent::WindowRescale { static_cast<double>(ui->scale) /
-                                          UiWayland::FRACTION_SCALE_DEN });
+            Application::self().add_event(AppEvent::WindowRescale {
+                static_cast<double>(ui->scale) / UiWayland::FRACTION_SCALE_DEN,
+            });
             Application::self().add_event(
                 AppEvent::WindowResize { ui->get_window_size() });
             Application::self().add_event(AppEvent::WindowRedraw {});
@@ -320,8 +387,14 @@ public:
     static void on_data_source_send(void*, struct wl_data_source*,
                                     const char* mime_type, int32_t fd)
     {
+        const Fd file(fd);
+
         const ImageEntryPtr entry =
-            Application::self().current_mode()->current_entry();
+            Application::self().current_mode()->get_current();
+        if (!entry) {
+            return;
+        }
+
         const std::string path = entry->path.string();
 
         int err_code = 0;
@@ -330,18 +403,9 @@ public:
             if (write(fd, path.c_str(), path.length()) == -1) {
                 err_code = errno;
             }
-        } else if (strcmp(mime_type, MIME_URI_LIST) == 0) {
-            std::string uri = "file://";
-            uri.reserve(uri.length() + path.length() + 16 /* spaces */);
-            for (const char chr : path) {
-                if (chr == ' ') {
-                    uri += "%20";
-                } else {
-                    uri += chr;
-                }
-            }
-            uri += "\r\n";
-            if (write(fd, uri.c_str(), uri.length()) == -1) {
+        } else if (strcmp(mime_type, URI_LIST_MIME) == 0) {
+            const std::string uri_list = urilist_create(path);
+            if (write(fd, uri_list.c_str(), uri_list.length()) == -1) {
                 err_code = errno;
             }
         } else {
@@ -351,17 +415,30 @@ public:
         if (err_code) {
             Log::error(err_code, "Unable to write file");
         }
-
-        close(fd);
     }
 
-    static void on_data_source_cancelled(void*, struct wl_data_source*) {}
+    static void on_data_source_cancelled(void* data, struct wl_data_source* src)
+    {
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        if (ui->wl.datasrc && ui->wl.datasrc.ptr == src) {
+            ui->wl.datasrc.destroy(ui->wl.datasrc);
+            ui->wl.datasrc.ptr = nullptr;
+        }
+    }
 
     static void on_data_source_dnd_drop_performed(void*, struct wl_data_source*)
     {
     }
 
-    static void on_data_source_dnd_finished(void*, struct wl_data_source*) {}
+    static void on_data_source_dnd_finished(void* data,
+                                            struct wl_data_source* src)
+    {
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        if (ui->wl.datasrc && ui->wl.datasrc.ptr == src) {
+            ui->wl.datasrc.destroy(ui->wl.datasrc);
+            ui->wl.datasrc.ptr = nullptr;
+        }
+    }
 
     static void on_data_source_action(void*, struct wl_data_source*, uint32_t)
     {
@@ -379,30 +456,39 @@ public:
     /***************************************************************************
      * Data device handlers
      **************************************************************************/
-    static wl_data_offer** get_datadev_offer()
-    {
-        static wl_data_offer* datadev_offer = nullptr;
-        return &datadev_offer;
-    }
-
     static void on_data_device_data_offer(void*, struct wl_data_device*,
-                                          struct wl_data_offer* offer)
-    {
-        *get_datadev_offer() = offer;
-    }
-
-    static void on_data_device_enter(void*, struct wl_data_device*, uint32_t,
-                                     struct wl_surface*, wl_fixed_t, wl_fixed_t,
-                                     struct wl_data_offer*)
+                                          struct wl_data_offer*)
     {
     }
 
-    static void on_data_device_leave(void*, struct wl_data_device*)
+    static void on_data_device_enter(void* data, struct wl_data_device*,
+                                     uint32_t serial, struct wl_surface*,
+                                     wl_fixed_t, wl_fixed_t,
+                                     struct wl_data_offer* offer)
     {
-        wl_data_offer** offer = get_datadev_offer();
-        if (*offer) {
-            wl_data_offer_destroy(*offer);
-            *offer = nullptr;
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        if (ui->wl.dataoffer) {
+            ui->wl.dataoffer.free();
+        }
+        if (ui->wl.datasrc) {
+            // own offer, keep it so it can be released on leave
+            ui->wl.dataoffer = offer;
+            return;
+        }
+        if (offer) {
+            wl_data_offer_accept(offer, serial, URI_LIST_MIME);
+            wl_data_offer_set_actions(offer,
+                                      WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY,
+                                      WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY);
+            ui->wl.dataoffer = offer;
+        }
+    }
+
+    static void on_data_device_leave(void* data, struct wl_data_device*)
+    {
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        if (ui->wl.dataoffer) {
+            ui->wl.dataoffer.free();
         }
     }
 
@@ -411,7 +497,68 @@ public:
     {
     }
 
-    static void on_data_device_drop(void*, struct wl_data_device*) {}
+    static void on_data_device_drop(void* data, struct wl_data_device*)
+    {
+        UiWayland* ui = reinterpret_cast<UiWayland*>(data);
+        if (!ui->wl.dataoffer) {
+            return;
+        }
+
+        // receive the data from the offer
+        int fds[2];
+        if (pipe2(fds, O_CLOEXEC) == -1) {
+            Log::error(
+                errno,
+                "Failed to create pipe for receiving drag-and-drop data");
+            ui->wl.dataoffer.free();
+            return;
+        }
+        wl_data_offer_receive(ui->wl.dataoffer, URI_LIST_MIME, fds[1]);
+        close(fds[1]);
+        wl_display_flush(ui->wl.display);
+
+        pollfd pfd {
+            .fd = fds[0],
+            .events = POLLIN,
+            .revents = 0,
+        };
+        std::string offer_data;
+        while (true) {
+            const int poll_rc = poll(&pfd, 1, 1000);
+            if (poll_rc <= 0) {
+                if (poll_rc < 0) {
+                    Log::error(errno,
+                               "Failed to poll pipe for drag-and-drop data");
+                } else {
+                    Log::error("Timeout while waiting for drag-and-drop data");
+                }
+                close(fds[0]);
+                ui->wl.dataoffer.free();
+                return;
+            }
+            uint8_t buffer[512];
+            const ssize_t rc = read(fds[0], buffer, sizeof(buffer));
+            if (rc == 0) {
+                break;
+            }
+            if (rc == -1 && errno != EAGAIN) {
+                Log::error(errno, "Unable to read drag-and-drop data");
+                close(fds[0]);
+                ui->wl.dataoffer.free();
+                return;
+            }
+            offer_data.insert(offer_data.end(), buffer, buffer + rc);
+        }
+        close(fds[0]);
+        wl_data_offer_finish(ui->wl.dataoffer);
+        ui->wl.dataoffer.free();
+
+        const std::vector<std::filesystem::path> paths =
+            urilist_parse(offer_data);
+        if (!paths.empty()) {
+            Application::self().add_event(AppEvent::DragAndDrop { paths });
+        }
+    }
 
     static void on_data_device_selection(void*, struct wl_data_device*,
                                          struct wl_data_offer* offer)
@@ -485,7 +632,7 @@ public:
     }
 
     static constexpr const wl_callback_listener frame_listener = {
-        .done = on_frame_done
+        .done = on_frame_done,
     };
 
     /***************************************************************************
@@ -554,7 +701,7 @@ public:
     }
 
     static constexpr const xdg_surface_listener xdgsurface_listener = {
-        .configure = on_xdg_surface_configure
+        .configure = on_xdg_surface_configure,
     };
 
     static void on_xdg_ping(void*, struct xdg_wm_base* base, uint32_t serial)
@@ -563,7 +710,7 @@ public:
     }
 
     static constexpr const xdg_wm_base_listener xdgbase_listener = {
-        .ping = on_xdg_ping
+        .ping = on_xdg_ping,
     };
 
     /***************************************************************************
@@ -571,7 +718,7 @@ public:
      **************************************************************************/
     static void on_registry_global(void* data, struct wl_registry* registry,
                                    uint32_t name, const char* interface,
-                                   uint32_t /* version */)
+                                   uint32_t version)
     {
         UiWayland* ui = reinterpret_cast<UiWayland*>(data);
 
@@ -585,16 +732,15 @@ public:
                             WL_SHM_POOL_CREATE_BUFFER_SINCE_VERSION);
         } else if (strcmp(interface, wl_seat_interface.name) == 0) {
             // seat (keyboard and mouse)
-            ui->wl.seat.bind(registry, name,
-                             WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION);
+            version = std::min(
+                version,
+                static_cast<uint32_t>(WL_POINTER_AXIS_VALUE120_SINCE_VERSION));
+            ui->wl.seat.bind(registry, name, version);
             wl_seat_add_listener(ui->wl.seat, &seat_listener, data);
-
         } else if (strcmp(interface, wl_data_device_manager_interface.name) ==
                    0) {
             // drag-and-drop + clipboard data device
-            ui->wl.datadev_mgr.bind(
-                registry, name,
-                WL_DATA_DEVICE_MANAGER_GET_DATA_DEVICE_SINCE_VERSION);
+            ui->wl.datadev_mgr.bind(registry, name, 3);
         } else if (strcmp(interface, xdg_wm_base_interface.name) == 0) {
             // xdg (app window)
             ui->wl.xwmbase.bind(registry, name, XDG_WM_BASE_PING_SINCE_VERSION);
@@ -954,7 +1100,7 @@ void UiWayland::set_cursor(CursorShape shape)
     wp_cursor_shape_device_v1* dev =
         wp_cursor_shape_manager_v1_get_pointer(wl.cursor_mgr, wl.pointer);
     if (dev) {
-        wp_cursor_shape_device_v1_set_shape(dev, 0, wlshape);
+        wp_cursor_shape_device_v1_set_shape(dev, pointer_serial, wlshape);
         wp_cursor_shape_device_v1_destroy(dev);
     }
 }
@@ -1000,11 +1146,21 @@ Size UiWayland::get_window_size()
 
 void UiWayland::set_window_size(const Size& size)
 {
-    width = size.width;
-    height = size.height;
+    const double abs_scale = static_cast<double>(scale) / FRACTION_SCALE_DEN;
+    width = size.width / abs_scale;
+    height = size.height / abs_scale;
+
+    if (wnd_buffer.width() != size.width ||
+        wnd_buffer.height() != size.height) {
+        if (!wnd_buffer.realloc(wl.shm, size.width, size.height)) {
+            return;
+        }
+    }
 
     xdg_surface_set_window_geometry(wl.xsurface, 0, 0, width, height);
-    wp_viewport_set_destination(wl.viewport, width, height);
+    if (wl.viewport) {
+        wp_viewport_set_destination(wl.viewport, width, height);
+    }
 
     Application::self().add_event(AppEvent::WindowResize { get_window_size() });
     Application::self().add_event(AppEvent::WindowRedraw {});

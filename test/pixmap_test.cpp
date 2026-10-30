@@ -7,6 +7,8 @@
 
 #include <format>
 
+namespace {
+
 ::testing::AssertionResult CheckPixmap(const Pixmap& pm,
                                        const std::vector<argb_t>& expect)
 {
@@ -37,18 +39,20 @@
 #define EXPECT_PMEQ(pm, ex) \
     EXPECT_TRUE(CheckPixmap(pm, ex)) << "Pixmap:\n" << to_string(pm)
 
-static std::string to_string(const Pixmap& pm)
+std::string to_string(const Pixmap& pm)
 {
     std::string res;
     for (size_t y = 0; y < pm.height(); ++y) {
         for (size_t x = 0; x < pm.width(); ++x) {
             res += std::format(
-                " {}", *reinterpret_cast<const uint32_t*>((pm.ptr(x, y))));
+                " {}", *reinterpret_cast<const uint32_t*>(pm.ptr(x, y)));
         }
         res += '\n';
     }
     return res;
 }
+
+} // anonymous namespace
 
 TEST(PixmapTest, Create)
 {
@@ -61,8 +65,8 @@ TEST(PixmapTest, Create)
 
     EXPECT_TRUE(pm.ptr(0, 0));
     EXPECT_TRUE(pm.ptr(9, 4));
-    EXPECT_EQ(pm.at(0, 0), 0);
-    EXPECT_EQ(pm.at(9, 4), 0);
+    EXPECT_EQ(pm.at(0, 0), 0U);
+    EXPECT_EQ(pm.at(9, 4), 0U);
 }
 
 TEST(PixmapTest, Attach)
@@ -295,7 +299,7 @@ TEST(PixmapTest, Copy)
 
     Pixmap bg;
     bg.create(Pixmap::ARGB, 4, 4);
-    bg.copy(fg, { 1, 1 });
+    bg.copy(fg, { .x = 1, .y = 1 });
 
     EXPECT_PMEQ(bg, expect);
 }

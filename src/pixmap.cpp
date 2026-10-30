@@ -4,18 +4,8 @@
 
 #include "pixmap.hpp"
 
-#include "imageformat.hpp"
-#include "log.hpp"
-
-#include <fcntl.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
-#include <cerrno>
-
 Pixmap::Pixmap(const Format format, const size_t width, const size_t height,
-               void* data)
+               void* data) noexcept
 {
     attach(format, width, height, data);
 }
@@ -66,53 +56,6 @@ void Pixmap::attach(const Format format, const size_t width,
     pm_data.clear();
 }
 
-bool Pixmap::save(const std::filesystem::path& path) const
-{
-    ImageFormat* png = FormatFactory::self().get("png");
-    if (!png) {
-        Log::error("Unable to export pixmap, PNG not supported");
-        return false;
-    }
-
-    const std::vector<uint8_t> data = png->encode(*this);
-    if (data.empty()) {
-        Log::error("Unable to export pixmap, PNG encode failed");
-        return false;
-    }
-
-    // open file
-    const int fd = open(path.c_str(), O_CREAT | O_WRONLY | O_TRUNC,
-                        S_IRUSR | S_IWUSR | S_IRGRP);
-    if (fd == -1) {
-        Log::error(errno, "Unable to create file {}", path.string());
-        return false;
-    }
-
-    // write file
-    const uint8_t* ptr = data.data();
-    size_t size = data.size();
-    while (size) {
-        const ssize_t written = write(fd, ptr, size);
-        if (written == -1) {
-            if (errno != EINTR) {
-                Log::error(errno, "Unable to write file {}", path.string());
-                close(fd);
-                return false;
-            }
-            continue;
-        }
-        size -= written;
-        ptr += written;
-    }
-
-    if (close(fd) == -1) {
-        Log::error(errno, "Failed to close file {}", path.string());
-        return false;
-    }
-
-    return true;
-}
-
 void Pixmap::free()
 {
     pm_width = 0;
@@ -159,16 +102,14 @@ void Pixmap::flip_horizontal()
 {
     assert(format() == Format::RGB || format() == Format::ARGB);
 
-    const size_t x_end = pm_width / 2;
-    uint8_t swap[sizeof(argb_t)];
+    argb_t* pixdata = reinterpret_cast<argb_t*>(ptr(0, 0));
+    const size_t stride = pm_stride / sizeof(argb_t);
 
     for (size_t y = 0; y < pm_height; ++y) {
+        argb_t* row = pixdata + y * stride;
+        const size_t x_end = pm_width / 2;
         for (size_t x = 0; x < x_end; ++x) {
-            void* left = ptr(x, y);
-            void* right = ptr(pm_width - x - 1, y);
-            std::memcpy(&swap, left, pm_bpp);
-            std::memcpy(left, right, pm_bpp);
-            std::memcpy(right, &swap, pm_bpp);
+            std::swap(row[x], row[pm_width - x - 1]);
         }
     }
 }
@@ -203,7 +144,8 @@ void Pixmap::rotate(const size_t angle)
         // rotate
         for (size_t y = 0; y < pm_height; ++y) {
             for (size_t x = 0; x < pm_width; ++x) {
-                size_t origin_x, origin_y;
+                size_t origin_x;
+                size_t origin_y;
                 if (angle == 90) {
                     origin_x = y;
                     origin_y = origin.pm_height - 1 - x;
@@ -226,11 +168,14 @@ void Pixmap::fill(const Rectangle& rect, const argb_t& color)
         return; // out of pixmap
     }
 
+    // Wayland compositors expect premultiplied alpha in ARGB buffers
+    const argb_t clr = format() == Format::ARGB ? color.premultiplied() : color;
+
     // create pattern
     const size_t pattern_sz = visible.width * sizeof(argb_t);
     argb_t* pattern = &at(visible.x, visible.y);
     for (size_t x = 0; x < visible.width; ++x) {
-        pattern[x] = color;
+        pattern[x] = clr;
     }
 
     // copy pattern
@@ -249,11 +194,31 @@ void Pixmap::fill_blend(const Rectangle& rect, const argb_t& color)
         return; // out of pixmap
     }
 
-    const size_t x_end = visible.x + visible.width;
-    const size_t y_end = visible.y + visible.height;
-    for (size_t y = visible.y; y < y_end; ++y) {
-        for (size_t x = visible.x; x < x_end; ++x) {
-            at(x, y).blend(color);
+    const uint32_t alpha = color.a;
+    if (alpha == argb_t::min) {
+        return; // fully transparent, nothing changes
+    }
+
+    const size_t width = visible.width;
+    const size_t stride = pm_stride / sizeof(argb_t);
+    argb_t* base = reinterpret_cast<argb_t*>(ptr(visible.x, visible.y));
+
+    // fully opaque: equivalent to a plain fill
+    if (alpha == argb_t::max) {
+        for (size_t y = 0; y < visible.height; ++y) {
+            argb_t* row = base + y * stride;
+            for (size_t x = 0; x < width; ++x) {
+                row[x] = color;
+            }
+        }
+        return;
+    }
+
+    // general case: constant blend factors, hoisted once
+    for (size_t y = 0; y < visible.height; ++y) {
+        argb_t* row = base + y * stride;
+        for (size_t x = 0; x < width; ++x) {
+            row[x].blend(color);
         }
     }
 }
@@ -268,14 +233,16 @@ void Pixmap::grid(const Rectangle& rect, const size_t size, const argb_t& clr0,
         return; // out of pixmap
     }
 
-    // fill patterns
+    // fill patterns (premultiplied alpha, as required by Wayland)
+    const argb_t clr0_pm = clr0.premultiplied();
+    const argb_t clr1_pm = clr1.premultiplied();
     std::vector<argb_t> patterns[2];
     patterns[0].resize(visible.width);
     patterns[1].resize(visible.width);
     for (size_t i = 0; i < visible.width; ++i) {
         const size_t tile = (i / size) % 2;
-        patterns[0][i] = tile ? clr0 : clr1;
-        patterns[1][i] = tile ? clr1 : clr0;
+        patterns[0][i] = tile ? clr0_pm : clr1_pm;
+        patterns[1][i] = tile ? clr1_pm : clr0_pm;
     }
 
     // copy patterns
@@ -335,16 +302,18 @@ void Pixmap::mask(const Pixmap& pm, const Point& pos, const argb_t& color)
 
     argb_t over { argb_t::min, color.r, color.g, color.b };
 
+    const uint8_t* srow0 = reinterpret_cast<const uint8_t*>(pm.ptr(0, 0));
+    const size_t sstride = pm.pm_stride;
+    argb_t* drow0 = reinterpret_cast<argb_t*>(ptr(visible.x, visible.y));
+    const size_t dstride = pm_stride / sizeof(argb_t);
+    const size_t width = visible.width;
+
     for (size_t y = 0; y < visible.height; ++y) {
-        const ssize_t src_y = diff_y + y;
-        const ssize_t dst_y = visible.y + y;
-        for (size_t x = 0; x < visible.width; ++x) {
-            const ssize_t src_x = diff_x + x;
-            const ssize_t dst_x = visible.x + x;
-            const uint8_t a =
-                *reinterpret_cast<const uint8_t*>(pm.ptr(src_x, src_y));
-            over.a = std::min(a, color.a);
-            at(dst_x, dst_y).blend(over);
+        const uint8_t* srow = srow0 + (diff_y + y) * sstride + diff_x;
+        argb_t* drow = drow0 + y * dstride;
+        for (size_t x = 0; x < width; ++x) {
+            over.a = std::min(srow[x], color.a);
+            drow[x].blend(over);
         }
     }
 }
@@ -386,21 +355,18 @@ void Pixmap::blend(const Pixmap& pm, const Point& pos)
     const size_t diff_x = visible.x - image.x;
     const size_t diff_y = visible.y - image.y;
 
+    const size_t width = visible.width;
+
+    const argb_t* srow0 = reinterpret_cast<const argb_t*>(pm.ptr(0, 0));
+    const size_t sstride = pm.pm_stride / sizeof(argb_t);
+    argb_t* drow0 = reinterpret_cast<argb_t*>(ptr(visible.x, visible.y));
+    const size_t dstride = pm_stride / sizeof(argb_t);
+
     for (size_t y = 0; y < visible.height; ++y) {
-        for (size_t x = 0; x < visible.width; ++x) {
-            argb_t& pixel = at(visible.x + x, visible.y + y);
-            pixel.blend(pm.at(diff_x + x, diff_y + y));
-        }
-    }
-}
-
-void Pixmap::foreach(const std::function<void(argb_t&)>& fn)
-{
-    assert(format() == Format::RGB || format() == Format::ARGB);
-
-    for (size_t y = 0; y < pm_height; ++y) {
-        for (size_t x = 0; x < pm_width; ++x) {
-            fn(at(x, y));
+        const argb_t* srow = srow0 + (diff_y + y) * sstride + diff_x;
+        argb_t* drow = drow0 + y * dstride;
+        for (size_t x = 0; x < width; ++x) {
+            drow[x].blend(srow[x]);
         }
     }
 }

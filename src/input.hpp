@@ -19,6 +19,13 @@ struct InputKeyboard {
     static std::optional<InputKeyboard> load(const std::string& expression);
 
     /**
+     * Convert modifier flags to string representation.
+     * @param mods combined modifier flags
+     * @return text representation
+     */
+    static std::string mods_to_string(const keymod_t mods);
+
+    /**
      * Get key combination description.
      * @return text description of key combination
      */
@@ -43,7 +50,7 @@ struct InputMouse {
 
     // * The button is a button code as defined in the Linux kernel's
     // * linux/input-event-codes.h header file, e.g. BTN_LEFT.
-    static mouse_btn_t to_button(uint16_t code);
+    static mouse_btn_t to_button(const uint16_t code);
 
     /**
      * Get buttons combination description.
@@ -58,10 +65,7 @@ struct InputMouse {
     bool operator==(const InputMouse& other) const;
 
     /** Check if input state is valid. */
-    inline operator bool() const
-    {
-        return buttons != NONE || mods != KEYMOD_NONE;
-    }
+    operator bool() const { return buttons != NONE || mods != KEYMOD_NONE; }
 
     mouse_btn_t buttons = NONE;  ///< Mouse buttons
     keymod_t mods = KEYMOD_NONE; ///< Keyboard modifiers
@@ -73,10 +77,6 @@ struct InputMouse {
     static constexpr mouse_btn_t BUTTON_MIDDLE = 1 << 2;
     static constexpr mouse_btn_t BUTTON_SIDE = 1 << 3;
     static constexpr mouse_btn_t BUTTON_EXTRA = 1 << 4;
-    static constexpr mouse_btn_t SCROLL_UP = 1 << 5;
-    static constexpr mouse_btn_t SCROLL_DOWN = 1 << 6;
-    static constexpr mouse_btn_t SCROLL_LEFT = 1 << 7;
-    static constexpr mouse_btn_t SCROLL_RIGHT = 1 << 8;
 };
 
 struct InputSignal {

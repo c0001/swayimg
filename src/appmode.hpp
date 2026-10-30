@@ -11,10 +11,18 @@
 #include <array>
 #include <functional>
 #include <map>
+#include <optional>
 #include <vector>
 
 class AppMode {
 public:
+    /** Application mode types. */
+    enum Type : uint8_t {
+        Viewer,
+        Slideshow,
+        Gallery,
+    };
+
     /** Image list event types. */
     enum class ImageListEvent : uint8_t {
         Create,
@@ -24,9 +32,15 @@ public:
 
     /** Input event handler. */
     using InputCallback = std::function<void()>;
-    /** Notification handler that is called when the image is switched. */
-    using ImageSwitchNotify = std::function<void()>;
 
+    /** Scroll event handler. */
+    using ScrollCallback = std::function<void(keymod_t, double, double)>;
+
+    /** Unassigned kay input event handler. */
+    using UnassignedKeyCallback =
+        std::function<void(const InputKeyboard& input)>;
+
+    /** Constructor. */
     AppMode();
 
     /**
@@ -50,7 +64,14 @@ public:
      * Get currently showed/selected image entry.
      * @return current image entry
      */
-    virtual ImageEntryPtr current_entry() = 0;
+    virtual ImageEntryPtr get_current() = 0;
+
+    /**
+     * Set currently showed/selected image entry.
+     * @param entry desired image entry
+     * @return true if image was opened/selected
+     */
+    virtual bool set_current(const ImageEntryPtr& entry) = 0;
 
     /**
      * Window resize handler.
@@ -67,17 +88,23 @@ public:
     /**
      * Handle key press event.
      * @param input input event description
-     * @return false if event not supported
      */
-    virtual bool handle_keyboard(const InputKeyboard& input);
+    void handle_keyboard(const InputKeyboard& input);
+
+    /**
+     * Handle mouse/touchpad scroll.
+     * @param kmods keyboard modifiers state
+     * @param delta_h,delta_v horizontal and vertical scroll delta
+     */
+    void handle_scroll(const keymod_t kmods, const double delta_h,
+                       const double delta_v) const;
 
     /**
      * Handle mouse click.
      * @param input input event description
      * @param pos mouse pointer coordinates
-     * @return false if event not supported
      */
-    virtual bool handle_mclick(const InputMouse& input, const Point& pos);
+    void handle_mclick(const InputMouse& input, const Point& pos);
 
     /**
      * Handle mouse move.
@@ -104,10 +131,10 @@ public:
     /**
      * Handle image list changes.
      * @param event event type
-     * @param entry updated image entry
+     * @param entries array of added/removed/updated image entries
      */
     virtual void handle_imagelist(const ImageListEvent event,
-                                  const ImageEntryPtr& entry) = 0;
+                                  const std::vector<ImageEntryPtr>& entries);
 
     /**
      * Check if current mode is active.
@@ -116,10 +143,10 @@ public:
     [[nodiscard]] bool is_active() const;
 
     /**
-     * Subscribe to the image switch event.
-     * @param cb event handler
+     * Set or toggle mark state for current image.
+     * @param state state to set, `std::nullopt` to toggle
      */
-    void subscribe_image_switch(const ImageSwitchNotify& cb);
+    void mark_current(const std::optional<bool>& state);
 
     /**
      * Set mark icon color.
@@ -166,11 +193,23 @@ public:
      */
     void bind_input(const InputSignal& input, const InputCallback& handler);
 
+public:
+    std::function<void()> on_image_change;   ///< Image switch callback
+    UnassignedKeyCallback on_unassigned_key; ///< Unassigned key handler
+    ScrollCallback on_scroll;                ///< Scroll handler
+
 protected:
     /**
      * Switch to another image.
      */
-    void switch_current();
+    virtual void switch_current();
+
+    /**
+     * Draw placeholder for empty image list.
+     * @param wnd window surface pixmap
+     * @param bkg window background color
+     */
+    static void draw_empty(Pixmap& wnd, const argb_t bkg);
 
 protected:
     argb_t mark_color;                       ///< Mark icon color
@@ -178,7 +217,6 @@ protected:
     std::array<Text::Scheme, 4> text_scheme; ///< Text layer scheme
 
 private:
-    std::vector<ImageSwitchNotify> img_switch;        ///< Image switch handlers
     std::map<InputKeyboard, InputCallback> kbindings; ///< Keyboard bindings
     std::map<InputMouse, InputCallback> mbindings;    ///< Mouse bindings
     std::map<InputSignal, InputCallback> sbindings;   ///< Signal bindings

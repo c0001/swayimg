@@ -7,6 +7,7 @@
 #include "appevent.hpp"
 #include "appmode.hpp"
 #include "fdevent.hpp"
+#include "sparam.hpp"
 #include "ui.hpp"
 
 #include <atomic>
@@ -14,22 +15,12 @@
 #include <functional>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <vector>
 
 class Application {
 public:
-    /** Application mode types. */
-    enum class Mode : uint8_t {
-        Viewer,
-        Slideshow,
-        Gallery,
-    };
-
     /** File descriptor event handler. */
     using FdEventHandler = std::function<void()>;
-    /** Notification handler that is called when the window is resized. */
-    using WindowResizeNotify = std::function<void()>;
 
     /**
      * Get global instance of the application.
@@ -41,12 +32,12 @@ public:
      * Get UI instance.
      * @return UI instance
      */
-    static inline Ui* get_ui() { return self().ui.get(); }
+    static Ui* get_ui() { return self().ui.get(); }
 
     /**
      * Redraw app window.
      */
-    static inline void redraw() { self().add_event(AppEvent::WindowRedraw {}); }
+    static void redraw() { self().add_event(AppEvent::WindowRedraw {}); }
 
     Application();
 
@@ -60,19 +51,19 @@ public:
      * Exit from application.
      * @param rc result code to set
      */
-    void exit(int rc);
+    void exit(const int rc);
 
     /**
      * Switch mode (viewer/slideshow/gallery).
      * @param mode mode to set
      */
-    void set_mode(Mode mode);
+    void set_mode(const AppMode::Type mode);
 
     /**
-     * Switch mode (viewer/slideshow/gallery).
+     * Get currently active mode (viewer/slideshow/gallery).
      * @param mode mode to set
      */
-    [[nodiscard]] Mode get_mode() const { return active_mode; }
+    [[nodiscard]] AppMode::Type get_mode() const { return active_mode; }
 
     /**
      * Get currently active application mode instance.
@@ -81,24 +72,29 @@ public:
     AppMode* current_mode();
 
     /**
-     * Add entry to image list.
-     * @param path image path
-     * @return added entry (first one for directory)
+     * Add entries to the image list.
+     * @param paths list of image paths to add
+     * @return first added entry
      */
-    ImageEntryPtr add_image_entry(const std::filesystem::path& path);
+    ImageEntryPtr add_images(const std::vector<std::filesystem::path>& paths);
 
     /**
-     * Remove entry from image list.
-     * @param path image path
+     * Remove entries from the image list.
+     * @param paths list of image paths to remove
      */
-    void remove_image_entry(const std::filesystem::path& path);
+    void remove_images(const std::vector<std::filesystem::path>& paths);
+
+    /**
+     * Remove all entries from the image list.
+     */
+    void remove_all_images();
 
     /**
      * Add file descriptor to monitor.
      * @param fd file descriptor to watch
      * @param handler callback
      */
-    void add_fdpoll(int fd, const FdEventHandler& handler);
+    void add_fdpoll(const int fd, const FdEventHandler& handler);
 
     /**
      * Add application event to the queue.
@@ -107,23 +103,35 @@ public:
     void add_event(const AppEvent::Holder& event);
 
     /**
-     * Subscribe to window resize event.
-     * @param cb event handler
+     * Check if all subsystems were initialized.
+     * @return true if all subsystems were initialized
      */
-    void subscribe_window_resize(const WindowResizeNotify& cb);
+    [[nodiscard]] bool initialized() const { return !sparams; }
+
+    /**
+     * Get application id.
+     * @return application id
+     */
+    [[nodiscard]] const std::string& get_appid() const;
 
 private:
     /**
      * Initialize image list.
      * @return first image entry to open, nullptr on errors
      */
-    ImageEntryPtr il_initialize();
+    [[nodiscard]] ImageEntryPtr il_initialize() const;
 
     /**
-     * Initialize UI subsystem.
-     * @return true if UI initialized successfully
+     * Initialize Wayland UI.
+     * @return pointer to UI interface if initialized successfully
      */
-    bool ui_initialize();
+    [[nodiscard]] Ui* ui_init_wayland() const;
+
+    /**
+     * Initialize DRM UI.
+     * @return pointer to UI interface if initialized successfully
+     */
+    [[nodiscard]] Ui* ui_init_drm() const;
 
     /**
      * Application event loop handler.
@@ -137,48 +145,40 @@ private:
     void handle_event(const AppEvent::WindowRescale& event);
     void handle_event(const AppEvent::WindowRedraw& event);
     void handle_event(const AppEvent::KeyPress& event);
+    void handle_event(const AppEvent::Scroll& event);
     void handle_event(const AppEvent::MouseClick& event);
     void handle_event(const AppEvent::MouseMove& event);
     void handle_event(const AppEvent::GesturePinch& event);
     void handle_event(const AppEvent::Signal& event);
+    void handle_event(const AppEvent::DragAndDrop& event);
     void handle_event(const AppEvent::FileCreate& event);
     void handle_event(const AppEvent::FileModify& event);
     void handle_event(const AppEvent::FileRemove& event);
 
+    // Signal handler, see std::signal for details
+    static void signal_handler(int signal);
+
 public:
-    /** Application startup parameters. */
-    struct StartupParams {
-        std::filesystem::path config;    ///< Lua config file to load
-        std::string lua_script;          ///< Lua script to start
-        std::filesystem::path from_file; ///< Load image list from file
-        std::vector<std::filesystem::path> sources; ///< Image list
-        std::optional<Mode> mode;                   ///< Initial mode
-        InputMouse dnd { InputMouse::BUTTON_RIGHT,
-                         KEYMOD_NONE };    ///< Mouse used for drag-and-drop
-        Rectangle window;                  ///< Main window position/size
-        bool use_overlay = false;          ///< Use overlay mode (Wayland only)
-        std::optional<bool> fullscreen;    ///< Full screen mode (Wayland only)
-        bool decoration = true;            ///< Window decoration (Wayland only)
-        uint32_t cursor_hide = 3000;       ///< Cursor hide time (Wayland only)
-        std::optional<std::string> app_id; ///< Window class name (Wayland only)
-        size_t drm_freq = 0;               ///< Display frequency (DRM only)
-    } sparams;
+    // Drag-n-Drop callback function
+    using DnDCallback =
+        std::function<void(const std::vector<std::filesystem::path>&)>;
 
-    /** Initialization complete callback. */
-    std::function<void()> on_init_complete = nullptr;
-
-    std::vector<WindowResizeNotify> wnd_resize_cb; ///< Window resize callbacks
+    std::unique_ptr<StartupParams> sparams;   ///< Startup parameters
+    std::function<void()> on_init_complete;   ///< Init complete callback
+    std::function<void()> on_wnd_resize;      ///< Window resize callback
+    std::function<void()> on_redraw_complete; ///< Redraw complete callback
+    DnDCallback on_drag_and_drop;             ///< Drag-n-Drop callback
 
 private:
     std::unique_ptr<Ui> ui; ///< UI instance
 
-    bool initialized = false; ///< Initialization complete flag
-
-    Mode active_mode = Mode::Viewer; ///< Currently active mode
+    std::string app_id;                          ///< Application id
+    AppMode::Type active_mode = AppMode::Viewer; ///< Currently active mode
 
     std::atomic<bool> stop_flag = false; ///< Application stop flag
     int exit_code = -1;                  ///< Application exit code
     FdEvent exit_event;                  ///< Application stop event
+    FdEvent signal_fds[2];               ///< Signal notifiers (USR1/USR2)
 
     std::vector<std::pair<int, FdEventHandler>>
         fds; ///< Monitored file descriptors

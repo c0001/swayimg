@@ -11,14 +11,16 @@
 #include <format>
 #include <utility>
 
-class ImageFormatJpeg2000 : public ImageFormat {
+namespace {
+
+class ImageFormatJp2 : public ImageFormat {
 public:
-    ImageFormatJpeg2000()
-        : ImageFormat(Priority::Low, "jpeg2000")
+    ImageFormatJp2() noexcept
+        : ImageFormat(Priority::Low, "jp2")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         // check signature and get codec type
         OPJ_CODEC_FORMAT codec_fmt;
@@ -74,54 +76,29 @@ public:
         }
         OpjImage opj_image(opj_imgptr, &opj_image_destroy);
         if (!opj_set_decode_area(opj_codec.get(), opj_image.get(), 0, 0,
-                                 opj_image->x1, opj_image->y1) ||
-            !opj_decode(opj_codec.get(), opj_stream.get(), opj_image.get()) ||
+                                 opj_image->x1, opj_image->y1)) {
+            return nullptr;
+        }
+
+        // check the pixmap size before decoding: OpenJPEG allocates buffers
+        // for all components first, the pixmap size limit applies too late
+        if (!opj_image->comps || opj_image->numcomps == 0 ||
+            opj_image->comps[0].w > MAX_SIZE ||
+            opj_image->comps[0].h > MAX_SIZE) {
+            Log::error("{}: Image size is over the limit ({}x{})", LOG_PREFIX,
+                       opj_image->comps[0].w, opj_image->comps[0].h);
+            return nullptr;
+        }
+
+        if (!opj_decode(opj_codec.get(), opj_stream.get(), opj_image.get()) ||
             !opj_end_decompress(opj_codec.get(), opj_stream.get())) {
             return nullptr;
         }
 
-        // get color space
-        Jp2ColorSpace cspace;
-        if (opj_image->color_space == OPJ_CLRSPC_SRGB) {
-            cspace = Jp2ColorSpace::SRGB;
-        } else if (opj_image->color_space == OPJ_CLRSPC_GRAY ||
-                   opj_image->numcomps <= 2) {
-            cspace = Jp2ColorSpace::Grayscale;
-        } else if (opj_image->color_space == OPJ_CLRSPC_EYCC) {
-            cspace = Jp2ColorSpace::EYCC;
-        } else if (opj_image->color_space == OPJ_CLRSPC_CMYK) {
-            cspace = Jp2ColorSpace::CMYK;
-        } else if (opj_image->color_space == OPJ_CLRSPC_SYCC ||
-                   (opj_image->numcomps == 3 &&
-                    opj_image->comps[0].dx == opj_image->comps[0].dy &&
-                    opj_image->comps[1].dx != 1)) {
-            const opj_image_comp_t& comp0 = opj_image->comps[0];
-            const opj_image_comp_t& comp1 = opj_image->comps[1];
-            const opj_image_comp_t& comp2 = opj_image->comps[2];
-            if (comp0.dx == 1 && comp1.dx == 2 && comp2.dx == 2 &&
-                comp0.dy == 1 && comp1.dy == 2 && comp2.dy == 2) {
-                cspace = Jp2ColorSpace::YUV420;
-            } else if (comp0.dx == 1 && comp1.dx == 2 && comp2.dx == 2 &&
-                       comp0.dy == 1 && comp1.dy == 1 && comp2.dy == 1) {
-                cspace = Jp2ColorSpace::YUV422;
-            } else if (comp0.dx == 1 && comp1.dx == 1 && comp2.dx == 1 &&
-                       comp0.dy == 1 && comp1.dy == 1 && comp2.dy == 1) {
-                cspace = Jp2ColorSpace::YUV444;
-            } else {
-                cspace = Jp2ColorSpace::SRGB; // use as fallback
-            }
-        } else if (opj_image->numcomps >= 3 &&
-                   opj_image->comps[0].dx == opj_image->comps[1].dx &&
-                   opj_image->comps[1].dx == opj_image->comps[2].dx &&
-                   opj_image->comps[0].dy == opj_image->comps[1].dy &&
-                   opj_image->comps[1].dy == opj_image->comps[2].dy &&
-                   opj_image->comps[0].prec == opj_image->comps[1].prec &&
-                   opj_image->comps[1].prec == opj_image->comps[2].prec &&
-                   opj_image->comps[0].sgnd == opj_image->comps[1].sgnd &&
-                   opj_image->comps[1].sgnd == opj_image->comps[2].sgnd) {
-            cspace = Jp2ColorSpace::SRGB;
-        } else {
-            cspace = Jp2ColorSpace::Grayscale;
+        const Jp2ColorSpace cspace = get_colorspace(*opj_image.get());
+        if (!check_components(*opj_image.get(), cspace)) {
+            Log::error("{}: Unsupported component layout", LOG_PREFIX);
+            return nullptr;
         }
 
         // scale precision to 8 bit per component
@@ -180,11 +157,14 @@ public:
 
 private:
     // JP2 signatures
-    static constexpr const uint8_t JP2_RFC3745[] = { 0x00, 0x00, 0x00, 0x0c,
-                                                     0x6a, 0x50, 0x20, 0x20,
-                                                     0x0d, 0x0a, 0x87, 0x0a };
+    static constexpr const uint8_t JP2_RFC3745[] = {
+        0x00, 0x00, 0x00, 0x0c, 0x6a, 0x50, 0x20, 0x20, 0x0d, 0x0a, 0x87, 0x0a,
+    };
     static constexpr const uint8_t JP2_MAGIC[] = { 0x0d, 0x0a, 0x87, 0x0a };
     static constexpr const uint8_t J2K_STREAM[] = { 0xff, 0x4f, 0xff, 0x51 };
+
+    // Max size of image
+    static constexpr const size_t MAX_SIZE = 65536;
 
     // Prefix used in log output
     static constexpr const char* LOG_PREFIX = "JPEG2000";
@@ -203,7 +183,7 @@ private:
         YUV422,
         YUV444,
         EYCC,
-        CMYK
+        CMYK,
     };
 
 private:
@@ -211,6 +191,130 @@ private:
     static void error_callback(const char* msg, void*)
     {
         Log::error("{}: {}", LOG_PREFIX, msg);
+    }
+
+    /**
+     * Get color space of the image.
+     * @param img jp2 image instance
+     * @return colorspace type
+     */
+    static Jp2ColorSpace get_colorspace(const opj_image_t& img)
+    {
+        // NOLINTBEGIN(bugprone-branch-clone)
+        Jp2ColorSpace cspace;
+        if (img.color_space == OPJ_CLRSPC_SRGB) {
+            cspace = Jp2ColorSpace::SRGB;
+        } else if (img.color_space == OPJ_CLRSPC_GRAY || img.numcomps <= 2) {
+            cspace = Jp2ColorSpace::Grayscale;
+        } else if (img.color_space == OPJ_CLRSPC_EYCC) {
+            cspace = Jp2ColorSpace::EYCC;
+        } else if (img.color_space == OPJ_CLRSPC_CMYK) {
+            cspace = Jp2ColorSpace::CMYK;
+        } else if (img.color_space == OPJ_CLRSPC_SYCC ||
+                   (img.numcomps == 3 && img.comps[0].dx == img.comps[0].dy &&
+                    img.comps[1].dx != 1)) {
+            const opj_image_comp_t& comp0 = img.comps[0];
+            const opj_image_comp_t& comp1 = img.comps[1];
+            const opj_image_comp_t& comp2 = img.comps[2];
+            if (comp0.dx == 1 && comp1.dx == 2 && comp2.dx == 2 &&
+                comp0.dy == 1 && comp1.dy == 2 && comp2.dy == 2) {
+                cspace = Jp2ColorSpace::YUV420;
+            } else if (comp0.dx == 1 && comp1.dx == 2 && comp2.dx == 2 &&
+                       comp0.dy == 1 && comp1.dy == 1 && comp2.dy == 1) {
+                cspace = Jp2ColorSpace::YUV422;
+            } else if (comp0.dx == 1 && comp1.dx == 1 && comp2.dx == 1 &&
+                       comp0.dy == 1 && comp1.dy == 1 && comp2.dy == 1) {
+                cspace = Jp2ColorSpace::YUV444;
+            } else {
+                cspace = Jp2ColorSpace::SRGB; // use as fallback
+            }
+        } else if (img.numcomps >= 3 && img.comps[0].dx == img.comps[1].dx &&
+                   img.comps[1].dx == img.comps[2].dx &&
+                   img.comps[0].dy == img.comps[1].dy &&
+                   img.comps[1].dy == img.comps[2].dy &&
+                   img.comps[0].prec == img.comps[1].prec &&
+                   img.comps[1].prec == img.comps[2].prec &&
+                   img.comps[0].sgnd == img.comps[1].sgnd &&
+                   img.comps[1].sgnd == img.comps[2].sgnd) {
+            cspace = Jp2ColorSpace::SRGB;
+        } else {
+            cspace = Jp2ColorSpace::Grayscale;
+        }
+        // NOLINTEND(bugprone-branch-clone)
+        return cspace;
+    }
+
+    /**
+     * Check that the components read by the loader exist and are big enough.
+     * Loaders index components with the size of the first one, but JPEG 2000
+     * components may differ in size and number.
+     * @param img JP2 image
+     * @param cspace color space of the image
+     * @return true if the image can be loaded
+     */
+    static bool check_components(const opj_image_t& img,
+                                 const Jp2ColorSpace cspace)
+    {
+        size_t count;
+        bool same_size;
+        switch (cspace) {
+            case Jp2ColorSpace::Grayscale:
+                count = 1;
+                same_size = false;
+                break;
+            case Jp2ColorSpace::SRGB:
+                count = img.numcomps > 3 ? 4 : 3;
+                same_size = true;
+                break;
+            case Jp2ColorSpace::YUV444:
+                count = 3;
+                same_size = true;
+                break;
+            case Jp2ColorSpace::YUV420:
+            case Jp2ColorSpace::YUV422:
+                count = 3;
+                same_size = false;
+                break;
+            default:
+                return true; // not loaded
+        }
+
+        if (!img.comps || img.numcomps < count) {
+            return false;
+        }
+        const opj_image_comp_t& comp0 = img.comps[0];
+        for (size_t i = 0; i < count; ++i) {
+            const opj_image_comp_t& comp = img.comps[i];
+            if (!comp.data || comp.w == 0 || comp.h == 0 || comp.prec == 0 ||
+                comp.prec > 31) {
+                return false;
+            }
+            if (same_size && (comp.w != comp0.w || comp.h != comp0.h)) {
+                return false;
+            }
+        }
+
+        if (cspace == Jp2ColorSpace::YUV420 ||
+            cspace == Jp2ColorSpace::YUV422) {
+            // Cb and Cr are read together: up to (width + 1) / 2 samples per
+            // row, one row per luma row (4:2:2) or per two luma rows (4:2:0)
+            const opj_image_comp_t& cb = img.comps[1];
+            const opj_image_comp_t& cr = img.comps[2];
+            if (cb.w != cr.w || cb.h != cr.h) {
+                return false;
+            }
+            const size_t max_w = comp0.w - (img.x0 & 1);
+            size_t rows = comp0.h;
+            if (cspace == Jp2ColorSpace::YUV420) {
+                rows = (comp0.h - (img.y0 & 1) + 1) / 2;
+            }
+            const size_t samples = static_cast<size_t>(cb.w) * cb.h;
+            if (samples < std::max<size_t>(1, rows * ((max_w + 1) / 2))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -267,8 +371,8 @@ private:
      * @param y,cb,cr YUV components
      * @return ARGB color
      */
-    static inline argb_t yuv_to_rgb(const OPJ_INT32 y, const OPJ_INT32 cb,
-                                    const OPJ_INT32 cr)
+    static argb_t yuv_to_rgb(const OPJ_INT32 y, const OPJ_INT32 cb,
+                             const OPJ_INT32 cr)
     {
         constexpr const OPJ_INT32 offset = 128; // 8-bit components
         const OPJ_INT32 cb_off = cb - offset;
@@ -324,6 +428,7 @@ private:
         }
     }
 
+    // NOLINTBEGIN(readability-function-cognitive-complexity)
     /**
      * Load pixmap from JP2 YUV 4:2:0 image.
      * @param img JP2 image
@@ -428,13 +533,14 @@ private:
             }
             if (yy < max_w) {
                 if (comp12w == yy / 2) {
-                    *px = yuv_to_rgb(*y, *cb, *cr);
+                    *px = yuv_to_rgb(*y, 0, 0);
                 } else {
                     *px = yuv_to_rgb(*y, *cb, *cr);
                 }
             }
         }
     }
+    // NOLINTEND(readability-function-cognitive-complexity)
 
     /**
      * Load pixmap from JP2 YUV 4:2:2 image.
@@ -523,9 +629,7 @@ private:
             }
 
             const size_t rest = bufio->data.size - bufio->position;
-            if (size > rest) {
-                size = rest;
-            }
+            size = std::min(size, rest);
             std::memcpy(buffer, bufio->data.data + bufio->position, size);
             bufio->position += size;
             return size;
@@ -559,4 +663,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatJpeg2000 format_jpeg2000;
+ImageFormatJp2 format_jp2;
+
+} // anonymous namespace

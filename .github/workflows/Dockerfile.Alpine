@@ -1,11 +1,14 @@
-FROM i386/alpine:latest
+FROM alpine:latest
 
 RUN apk add \
     bash-completion-dev \
     build-base \
     exiv2-dev \
+    ffmpeg-dev \
+    font-dejavu \
     giflib-dev \
     json-c-dev \
+    libavif-dev \
     libdrm-dev \
     libheif-dev \
     libjpeg-turbo-dev \
@@ -17,6 +20,8 @@ RUN apk add \
     libxkbcommon-dev \
     luajit-dev \
     meson \
+    minizip-ng-dev \
+    openexr-dev \
     openjpeg-dev \
     wayland-dev \
     wayland-protocols

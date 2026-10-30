@@ -9,8 +9,6 @@
 
 #include <cassert>
 #include <cstring>
-#include <filesystem>
-#include <functional>
 #include <vector>
 
 class Pixmap {
@@ -28,7 +26,7 @@ public:
      * @param data pointer to external data buffer
      */
     Pixmap(const Format format, const size_t width, const size_t height,
-           void* data);
+           void* data) noexcept;
 
     /**
      * Create pixmap.
@@ -48,13 +46,6 @@ public:
                 void* data, const size_t stride = 0);
 
     /**
-     * Save pixmap to a PNG file.
-     * @param path path to write the file
-     * @return true on success
-     */
-    [[nodiscard]] bool save(const std::filesystem::path& path) const;
-
-    /**
      * Free pixmap.
      */
     void free();
@@ -63,36 +54,36 @@ public:
      * Get pixmap width.
      * @return pixmap width in pixels
      */
-    [[nodiscard]] inline size_t width() const { return pm_width; }
+    [[nodiscard]] size_t width() const { return pm_width; }
 
     /**
      * Get pixmap height.
      * @return pixmap height in pixels
      */
-    [[nodiscard]] inline size_t height() const { return pm_height; }
+    [[nodiscard]] size_t height() const { return pm_height; }
 
     /**
      * Get stride (size of a single line in bytes).
      * @return stride size in bytes
      */
-    [[nodiscard]] inline size_t stride() const { return pm_stride; }
+    [[nodiscard]] size_t stride() const { return pm_stride; }
 
     /**
      * Get pixmap format.
      * @return pixmap format
      */
-    [[nodiscard]] inline Format format() const { return pm_format; }
+    [[nodiscard]] Format format() const { return pm_format; }
 
     /**
      * Check if there is data in the pixmap.
      */
-    inline operator bool() const { return pm_width && pm_height; }
+    operator bool() const { return pm_width && pm_height; }
 
     /**
      * Cast to Size object.
      * @return Size object
      */
-    inline operator Size() const { return { pm_width, pm_height }; }
+    operator Size() const { return { .width = pm_width, .height = pm_height }; }
 
     /**
      * Create attached submap from current pixmap.
@@ -106,7 +97,7 @@ public:
      * @param x,y pixel position within the pixmap
      * @return pointer to the pixel
      */
-    inline void* ptr(const size_t x, const size_t y)
+    void* ptr(const size_t x, const size_t y)
     {
         assert(x < pm_width);
         assert(y < pm_height);
@@ -120,7 +111,7 @@ public:
      * @param x,y pixel position within the pixmap
      * @return pointer to the pixel
      */
-    [[nodiscard]] inline const void* ptr(const size_t x, const size_t y) const
+    [[nodiscard]] const void* ptr(const size_t x, const size_t y) const
     {
         assert(x < pm_width);
         assert(y < pm_height);
@@ -134,7 +125,7 @@ public:
      * @param x,y pixel position within the pixmap
      * @return reference to the pixel
      */
-    [[nodiscard]] inline argb_t& at(const size_t x, const size_t y)
+    [[nodiscard]] argb_t& at(const size_t x, const size_t y)
     {
         assert(format() == Format::RGB || format() == Format::ARGB);
         return *reinterpret_cast<argb_t*>(ptr(x, y));
@@ -145,7 +136,7 @@ public:
      * @param x,y pixel position within the pixmap
      * @return const reference to the pixel
      */
-    [[nodiscard]] inline const argb_t& at(const size_t x, const size_t y) const
+    [[nodiscard]] const argb_t& at(const size_t x, const size_t y) const
     {
         assert(format() == Format::RGB || format() == Format::ARGB);
         return *reinterpret_cast<const argb_t*>(ptr(x, y));
@@ -168,9 +159,12 @@ public:
     void rotate(const size_t angle);
 
     /**
-     * Fill area with specified color (ARGB only).
+     * Fill area with specified color.
+     * The color is converted to premultiplied alpha for ARGB pixmaps,
+     * because Wayland compositors expect premultiplied alpha in shared
+     * buffers; RGB pixmaps (DRM) keep the straight color.
      * @param rect target rectangle area
-     * @param color color to set
+     * @param color color to set (straight alpha)
      */
     void fill(const Rectangle& rect, const argb_t& color);
 
@@ -223,9 +217,25 @@ public:
 
     /**
      * Apply filter to transform the entire pixmap.
-     * @param fn filter function
+     * @param fn filter function (called for every pixel)
      */
-    void foreach(const std::function<void(argb_t&)>& fn);
+    template <typename Fn> void foreach(Fn&& fn)
+    {
+        assert(pm_ext || !pm_data.empty());
+        assert(format() == Format::RGB || format() == Format::ARGB);
+
+        argb_t* pixdata =
+            reinterpret_cast<argb_t*>(pm_ext ? pm_ext : pm_data.data());
+        const size_t stride = pm_stride / sizeof(argb_t);
+        const size_t width = pm_width;
+
+        for (size_t y = 0; y < pm_height; ++y) {
+            argb_t* row = pixdata + y * stride;
+            for (size_t x = 0; x < width; ++x) {
+                fn(row[x]);
+            }
+        }
+    }
 
     /**
      * Convert ABGR to ARGB.

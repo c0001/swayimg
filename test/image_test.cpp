@@ -2,17 +2,19 @@
 // Copyright (C) 2024 Artem Senichev <artemsen@gmail.com>
 
 #include "buildconf.hpp"
-#include "imageformat.hpp"
+#include "formatfactory.hpp"
 
 #include <gtest/gtest.h>
 #include <unistd.h>
 
-static ImagePtr load_image(const char* path)
+namespace {
+ImagePtr load_image(const char* path)
 {
     const ImageEntryPtr entry = std::make_shared<ImageEntry>();
     entry->path = path;
     return FormatFactory::self().load(entry);
 }
+} // anonymous namespace
 
 #define TEST_IMAGE_LOAD(fmt)                                             \
     TEST(ImageLoadTest, fmt)                                             \
@@ -28,6 +30,7 @@ TEST_IMAGE_LOAD(ff);
 TEST_IMAGE_LOAD(pnm);
 TEST_IMAGE_LOAD(qoi);
 TEST_IMAGE_LOAD(tga);
+TEST_IMAGE_LOAD(xbm);
 #ifdef HAVE_LIBEXR
 TEST_IMAGE_LOAD(exr);
 #endif
@@ -63,6 +66,9 @@ TEST_IMAGE_LOAD(webp);
 #endif
 #ifdef HAVE_LIBRSVG
 TEST_IMAGE_LOAD(svg);
+#endif
+#ifdef HAVE_KRITA
+TEST_IMAGE_LOAD(kra);
 #endif
 
 #if defined(HAVE_LIBJPEG) && defined(HAVE_LIBEXIV2)

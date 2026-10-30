@@ -9,9 +9,11 @@
 #include <format>
 #include <memory>
 
+namespace {
+
 class ImageFormatAvif : public ImageFormat {
 public:
-    ImageFormatAvif()
+    ImageFormatAvif() noexcept
         : ImageFormat(Priority::High, "avif")
     {
     }
@@ -19,7 +21,7 @@ public:
     using AvifDecoder =
         std::unique_ptr<avifDecoder, decltype(&avifDecoderDestroy)>;
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (!check_signature(data, { 'f', 't', 'y', 'p' }, 4)) {
             return nullptr;
@@ -94,7 +96,7 @@ private:
      * @param pm destination pixmap
      * @return decoding status
      */
-    avifResult decode_frame(AvifDecoder& avif, Pixmap& pm) const
+    static avifResult decode_frame(AvifDecoder& avif, Pixmap& pm)
     {
         avifResult rc;
         avifRGBImage rgb;
@@ -114,7 +116,8 @@ private:
             pm.create(avif->alphaPresent ? Pixmap::ARGB : Pixmap::RGB,
                       rgb.width, rgb.height);
             std::memcpy(&pm.at(0, 0), rgb.pixels,
-                        rgb.width * rgb.height * sizeof(argb_t));
+                        static_cast<size_t>(rgb.width) * rgb.height *
+                            sizeof(argb_t));
         }
 
         avifRGBImageFreePixels(&rgb);
@@ -124,4 +127,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatAvif format_avif;
+ImageFormatAvif format_avif;
+
+} // anonymous namespace

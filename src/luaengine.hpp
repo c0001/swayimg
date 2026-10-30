@@ -4,9 +4,8 @@
 
 #pragma once
 
+#include "fdevent.hpp"
 #include "image.hpp"
-#include "log.hpp"
-#include "text.hpp"
 
 // clang-format off
 // lua headers must be included in this order
@@ -18,6 +17,7 @@
 
 #include <filesystem>
 #include <format>
+#include <stdexcept>
 #include <vector>
 
 /** Lua integration. */
@@ -54,12 +54,6 @@ private:
     void bind_appmode_api(const char* name);
 
     /**
-     * Call a Lua function with debug.traceback as error handler.
-     * @param ref reference to the Lua function to call
-     */
-    void execute(const luabridge::LuaRef* ref) const;
-
-    /**
      * Convert image entry to Lua table.
      * @param entry image entry to convert
      * @return Lua table object
@@ -70,33 +64,9 @@ private:
     /**
      * Add reference to Lua object.
      * @param obj Lua reference to increment
-     * @return created reference to use in future
+     * @return created reference to use it in future
      */
-    luabridge::LuaRef* add_ref(const luabridge::LuaRef* obj);
-
-    /**
-     * Print warning about using a deprecated function.
-     * @param name name of deprecated function
-     * @param replacement description of replacement
-     */
-    void warn_deprecated(const char* name, const char* replacement) const;
-
-    /**
-     * Print Lua error message.
-     * @param fmt error text format
-     * @param ... format arguments
-     */
-    template <typename... Args>
-    void print_error(const std::format_string<Args...> fmt,
-                     Args&&... args) const
-    {
-        const std::string message =
-            std::vformat(fmt.get(), std::make_format_args(args...));
-        const std::string status =
-            message.substr(0, message.find_first_of('\n'));
-        Log::error("{}", message);
-        Text::self().set_status(status);
-    }
+    const luabridge::LuaRef* add_ref(const luabridge::LuaRef* obj);
 
     /**
      * Raise Lua error.
@@ -110,11 +80,21 @@ private:
     {
         const std::string message =
             std::vformat(fmt.get(), std::make_format_args(args...));
-        throw luabridge::raise_lua_error(lua_state, "%s", message.c_str());
+        luabridge::raise_lua_error(lua_state, "%s", message.c_str());
+        throw std::runtime_error(message.c_str());
     }
 
+    /**
+     * Print warning about using a deprecated function.
+     * @param name name of deprecated function
+     * @param replacement description of replacement
+     */
+    static void warn_deprecated(const char* name, const char* replacement);
+
 private:
-    lua_State* lua_state = nullptr;       ///< Lua state
-    std::vector<luabridge::LuaRef*> refs; ///< Own Lua references
-    lua_CFunction traceback_fn; ///< debug.traceback for error stack traces
+    lua_State* lua_state = nullptr;             ///< Lua state
+    std::vector<const luabridge::LuaRef*> refs; ///< Own Lua references
+
+    FdTimer defer_timer;                   ///< Timer for deferred call
+    luabridge::LuaRef* defer_fn = nullptr; ///< Deferred callback
 };

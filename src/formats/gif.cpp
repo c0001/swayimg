@@ -9,14 +9,16 @@
 #include <cstring>
 #include <utility>
 
+namespace {
+
 class ImageFormatGif : public ImageFormat {
 public:
-    ImageFormatGif()
+    ImageFormatGif() noexcept
         : ImageFormat(Priority::Normal, "gif")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (!check_signature(data, { 'G', 'I', 'F' })) {
             return nullptr;
@@ -31,6 +33,9 @@ public:
         }
         if (DGifSlurp(gif) != GIF_OK) {
             return nullptr;
+        }
+        if (gif->ImageCount <= 0 || gif->SWidth <= 0 || gif->SHeight <= 0) {
+            return nullptr; // no frames or empty canvas
         }
 
         // allocate image and frames
@@ -94,8 +99,8 @@ private:
             }
         }
 
-        operator GifFileType*() { return gif; }
-        GifFileType* operator->() { return gif; }
+        operator GifFileType*() const { return gif; }
+        GifFileType* operator->() const { return gif; }
 
         GifFileType* gif;
     };
@@ -106,8 +111,8 @@ private:
      * @param frames all image frames
      * @param index number of the frame to load
      */
-    void decode_frame(Gif& gif, std::vector<Image::Frame>& frames,
-                      const size_t index)
+    static void decode_frame(Gif& gif, std::vector<Image::Frame>& frames,
+                             const size_t index)
     {
         Image::Frame& frame = frames[index];
 
@@ -119,22 +124,36 @@ private:
         if (ctl.DisposalMode == DISPOSE_PREVIOUS && index + 1 < frames.size()) {
             const Pixmap& curr = frame.pm;
             Pixmap& next = frames[index + 1].pm;
-            next.copy(curr, { 0, 0 });
+            next.copy(curr, { .x = 0, .y = 0 });
         }
 
         const SavedImage* gif_img = &gif->SavedImages[index];
         const GifImageDesc* desc = &gif_img->ImageDesc;
         const ColorMapObject* color_map =
             desc->ColorMap ? desc->ColorMap : gif->SColorMap;
+        if (!color_map) {
+            return;
+        }
 
-        const size_t width = std::min(static_cast<size_t>(desc->Width),
-                                      frame.pm.width() - desc->Left);
-        const size_t height = std::min(static_cast<size_t>(desc->Height),
-                                       frame.pm.height() - desc->Top);
+        // clip the frame rectangle to the canvas: position and size of the
+        // frame come from the file and may lie partly or fully outside it,
+        // the raster (Width x Height bytes) is never read past its end
+        const bool valid = gif_img->RasterBits && desc->Left >= 0 &&
+            desc->Top >= 0 && desc->Width > 0 && desc->Height > 0;
+        const size_t left = valid ? desc->Left : 0;
+        const size_t top = valid ? desc->Top : 0;
+        const size_t raster_width = valid ? desc->Width : 0;
+        const size_t raster_height = valid ? desc->Height : 0;
+        const size_t width = left < frame.pm.width()
+            ? std::min(raster_width, frame.pm.width() - left)
+            : 0;
+        const size_t height = top < frame.pm.height()
+            ? std::min(raster_height, frame.pm.height() - top)
+            : 0;
         for (size_t y = 0; y < height; ++y) {
-            const uint8_t* raster = &gif_img->RasterBits[y * desc->Width];
+            const uint8_t* raster = &gif_img->RasterBits[y * raster_width];
             for (size_t x = 0; x < width; ++x) {
-                argb_t& pixel = frame.pm.at(x + desc->Left, y + desc->Top);
+                argb_t& pixel = frame.pm.at(x + left, y + top);
                 const uint8_t color = raster[x];
                 if (std::cmp_not_equal(color, ctl.TransparentColor) &&
                     std::cmp_less(color, color_map->ColorCount)) {
@@ -150,11 +169,12 @@ private:
         if (ctl.DisposalMode == DISPOSE_DO_NOT && index + 1 < frames.size()) {
             const Pixmap& curr = frame.pm;
             Pixmap& next = frames[index + 1].pm;
-            next.copy(curr, { 0, 0 });
+            next.copy(curr, { .x = 0, .y = 0 });
         }
 
         if (ctl.DelayTime != 0) {
-            frame.duration = ctl.DelayTime * 10; // hundreds of second to ms
+            // hundreds of second to ms
+            frame.duration = static_cast<size_t>(ctl.DelayTime) * 10;
         } else {
             frame.duration = 100;
         }
@@ -162,4 +182,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatGif format_gif;
+ImageFormatGif format_gif;
+
+} // anonymous namespace

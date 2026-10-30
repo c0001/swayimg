@@ -17,10 +17,10 @@ The program searches for the config file in the following locations:
 
 Config example:
 ```lua
-swayimg.text.set_size(32)
-swayimg.text.set_foreground(0xffff0000)
+swayimg.text.size = 32
+swayimg.text.color = 0xffff0000
 
-swayimg.viewer.set_default_scale("fill")
+swayimg.viewer.default_scale = "fill"
 
 swayimg.gallery.on_key("Delete", function()
   local image = swayimg.gallery.get_image()
@@ -34,166 +34,325 @@ or in the file `/usr/share/swayimg/example.lua` after installing the program.
 ## List of available functions
 
 * General functionality
-  * [swayimg.exit](#swayimgexit): Exit from application
-  * [swayimg.set_mode](#swayimgset_mode): Switch to specified mode
-  * [swayimg.get_mode](#swayimgget_mode): Get current mode
-  * [swayimg.set_title](#swayimgset_title): Set title for main application window
-  * [swayimg.get_window_size](#swayimgget_window_size): Get application window size
-  * [swayimg.set_window_size](#swayimgset_window_size): Set application window size
-  * [swayimg.on_window_resize](#swayimgon_window_resize): Add a callback function called when main window is resized
-  * [swayimg.get_mouse_pos](#swayimgget_mouse_pos): Get mouse pointer coordinates
-  * [swayimg.set_fullscreen](#swayimgset_fullscreen): Enable/disable or toggle full screen mode
-  * [swayimg.get_fullscreen](#swayimgget_fullscreen): Get current full screen mode status
-  * [swayimg.toggle_fullscreen](#swayimgtoggle_fullscreen): Toggle full screen mode
-  * [swayimg.on_initialized](#swayimgon_initialized): Add a callback function called when all subsystems have been initialized
-  * [swayimg.enable_antialiasing](#swayimgenable_antialiasing): Enable or disable antialiasing
-  * [swayimg.enable_exif_orientation](#swayimgenable_exif_orientation): Enable or disable changing orientation based on EXIF
-  * [swayimg.set_format_params](#swayimgset_format_params): Setting format parameters
-  * [swayimg.enable_decoration](#swayimgenable_decoration): Enable or disable window decoration (title, border, buttons)
-  * [swayimg.enable_overlay](#swayimgenable_overlay): Enable or disable window overlay mode
-  * [swayimg.set_appid](#swayimgset_appid): Set application Id, default is `swayimg`
-  * [swayimg.get_appid](#swayimgget_appid): Get application Id
-  * [swayimg.set_dnd_button](#swayimgset_dnd_button): Set mouse button used for drag-and-drop image file to external apps
+  * [swayimg.appid](#swayimgappid): Application Id
+  * [swayimg.mode](#swayimgmode): Application mode
+  * [swayimg.fullscreen](#swayimgfullscreen): Full screen mode
+  * [swayimg.dnd_button](#swayimgdnd_button): Mouse button used for drag-and-drop image file to external apps
+  * [swayimg.overlay](#swayimgoverlay): Window overlay mode
+  * [swayimg.decoration](#swayimgdecoration): Window decoration (title, border, buttons)
+  * [swayimg.antialiasing](#swayimgantialiasing): Anti-aliasing mode
+  * [swayimg.exif_orientation](#swayimgexif_orientation): Automatic orientation based on EXIF
+  * [swayimg.format_conf](#swayimgformat_conf): Custom image format parameters
+  * [swayimg.title](#swayimgtitle): Window title
+  * [swayimg.exit()](#swayimgexit): Exit from application
+  * [swayimg.get_window_size()](#swayimgget_window_size): Get application window size
+  * [swayimg.set_window_size()](#swayimgset_window_size): Set application window size
+  * [swayimg.on_window_resize()](#swayimgon_window_resize): Set a callback function called when main window is resized
+  * [swayimg.get_mouse_pos()](#swayimgget_mouse_pos): Get mouse pointer coordinates
+  * [swayimg.on_initialized()](#swayimgon_initialized): Set a callback function called when all subsystems have been initialized
+  * [swayimg.on_redrawn()](#swayimgon_redrawn): Set a callback function called after the window is drawn
+  * [swayimg.on_dnd()](#swayimgon_dnd): Set a callback function called on drag-and-drop operations
+  * [swayimg.defer()](#swayimgdefer): Execute deferred procedure
 * Image list
-  * [swayimg.imagelist.size](#swayimgimagelistsize): Get number of entries in the image list
-  * [swayimg.imagelist.get](#swayimgimagelistget): Get list of all entries in the image list
-  * [swayimg.imagelist.add](#swayimgimagelistadd): Add entry to the image list
-  * [swayimg.imagelist.remove](#swayimgimagelistremove): Remove entry from the image list
-  * [swayimg.imagelist.set_order](#swayimgimagelistset_order): Set sort order of the image list
-  * [swayimg.imagelist.enable_reverse](#swayimgimagelistenable_reverse): Enable or disable reverse order
-  * [swayimg.imagelist.enable_recursive](#swayimgimagelistenable_recursive): Enable or disable recursive directory reading
-  * [swayimg.imagelist.enable_adjacent](#swayimgimagelistenable_adjacent): Enable or disable adding adjacent files from the same directory
-  * [swayimg.imagelist.enable_fsmon](#swayimgimagelistenable_fsmon): Enable or disable file system monitoring
-* Text layer
-  * [swayimg.text.show](#swayimgtextshow): Force show the text layer
-  * [swayimg.text.hide](#swayimgtexthide): Hide the text layer
-  * [swayimg.text.visible](#swayimgtextvisible): Check if text layer is visible
-  * [swayimg.text.set_font](#swayimgtextset_font): Set font face
-  * [swayimg.text.set_size](#swayimgtextset_size): Set font size
-  * [swayimg.text.set_spacing](#swayimgtextset_spacing): Set line spacing
-  * [swayimg.text.set_padding](#swayimgtextset_padding): Set the padding from the window edges
-  * [swayimg.text.set_foreground](#swayimgtextset_foreground): Set foreground text color
-  * [swayimg.text.set_background](#swayimgtextset_background): Set background text color
-  * [swayimg.text.set_shadow](#swayimgtextset_shadow): Set shadow text color
-  * [swayimg.text.set_timeout](#swayimgtextset_timeout): Set a timeout after which the entire text layer will be hidden
-  * [swayimg.text.set_status_timeout](#swayimgtextset_status_timeout): Set a timeout after which the status message will be hidden
-  * [swayimg.text.set_status](#swayimgtextset_status): Show status message
+  * [swayimg.imagelist.order](#swayimgimagelistorder): Sort order of the image list
+  * [swayimg.imagelist.reverse](#swayimgimagelistreverse): Reverse the image list order
+  * [swayimg.imagelist.recursive](#swayimgimagelistrecursive): Recursive directory reading
+  * [swayimg.imagelist.adjacent](#swayimgimagelistadjacent): Adding adjacent files from the same directory
+  * [swayimg.imagelist.fsmon](#swayimgimagelistfsmon): File system monitoring
+  * [swayimg.imagelist.size](#swayimgimagelistsize): Total number of entries in the image list
+  * [swayimg.imagelist.add()](#swayimgimagelistadd): Add entries to the image list
+  * [swayimg.imagelist.remove()](#swayimgimagelistremove): Remove specified entries from the image list
+  * [swayimg.imagelist.clear()](#swayimgimagelistclear): Clear the image list
+  * [swayimg.imagelist.get()](#swayimgimagelistget): Get list of all entries in the image list
+* Text overlay layer
+  * [swayimg.text.visible](#swayimgtextvisible): Text overlay state
+  * [swayimg.text.timeout](#swayimgtexttimeout): Timeout in seconds after which the entire text layer will be hidden
+  * [swayimg.text.status_timeout](#swayimgtextstatus_timeout): Timeout in seconds after which the status message will be hidden
+  * [swayimg.text.font](#swayimgtextfont): Font name
+  * [swayimg.text.size](#swayimgtextsize): Font size in pixels
+  * [swayimg.text.spacing](#swayimgtextspacing): Line spacing in pixels
+  * [swayimg.text.padding](#swayimgtextpadding): Padding from the window edges in pixels
+  * [swayimg.text.color](#swayimgtextcolor): Foreground text color
+  * [swayimg.text.background](#swayimgtextbackground): Background text color
+  * [swayimg.text.shadow](#swayimgtextshadow): Shadow text color
+  * [swayimg.text.status](#swayimgtextstatus): Status message
 * Viewer mode
-  * [swayimg.viewer.switch_image](#swayimgviewerswitch_image): Open the next file in the specified direction
-  * [swayimg.viewer.open](#swayimgvieweropen): Open the file at the specified path
-  * [swayimg.viewer.get_image](#swayimgviewerget_image): Get information about currently displayed image
-  * [swayimg.viewer.reload](#swayimgviewerreload): Reload current image
-  * [swayimg.viewer.reset](#swayimgviewerreset): Reset position and scale to default values
-  * [swayimg.viewer.get_scale](#swayimgviewerget_scale): Get current image scale
-  * [swayimg.viewer.set_abs_scale](#swayimgviewerset_abs_scale): Set absolute image scale
-  * [swayimg.viewer.set_fix_scale](#swayimgviewerset_fix_scale): Set fixed scale for currently displayed image
-  * [swayimg.viewer.set_default_scale](#swayimgviewerset_default_scale): Set default image scale for newly opened images
-  * [swayimg.viewer.get_position](#swayimgviewerget_position): Get image position
-  * [swayimg.viewer.set_abs_position](#swayimgviewerset_abs_position): Set absolute image position
-  * [swayimg.viewer.set_fix_position](#swayimgviewerset_fix_position): Set fixed image position
-  * [swayimg.viewer.set_default_position](#swayimgviewerset_default_position): Set default image position for newly opened images
-  * [swayimg.viewer.next_frame](#swayimgviewernext_frame): Show next frame from multi-frame image (animation)
-  * [swayimg.viewer.prev_frame](#swayimgviewerprev_frame): Show previous frame from multi-frame image (animation)
-  * [swayimg.viewer.set_animation](#swayimgviewerset_animation): Stop/resume animation
-  * [swayimg.viewer.get_animation](#swayimgviewerget_animation): Get current status of animation
-  * [swayimg.viewer.animation_stop](#swayimgvieweranimation_stop): Stop animation
-  * [swayimg.viewer.animation_resume](#swayimgvieweranimation_resume): Resume animation
-  * [swayimg.viewer.flip_vertical](#swayimgviewerflip_vertical): Flip image vertically
-  * [swayimg.viewer.flip_horizontal](#swayimgviewerflip_horizontal): Flip image horizontally
-  * [swayimg.viewer.rotate](#swayimgviewerrotate): Rotate image
-  * [swayimg.viewer.export](#swayimgviewerexport): Export currently displayed frame to PNG file
-  * [swayimg.viewer.set_meta](#swayimgviewerset_meta): Add/replace/remove meta info for currently displayed image
-  * [swayimg.viewer.set_drag_button](#swayimgviewerset_drag_button): Set the mouse button used to drag the image around the window
-  * [swayimg.viewer.set_window_background](#swayimgviewerset_window_background): Set window background color and mode
-  * [swayimg.viewer.set_image_background](#swayimgviewerset_image_background): Set background color for transparent images
-  * [swayimg.viewer.set_image_chessboard](#swayimgviewerset_image_chessboard): Set parameters for chessboard used as background for transparent images
-  * [swayimg.viewer.enable_centering](#swayimgviewerenable_centering): Enable or disable automatic image centering
-  * [swayimg.viewer.enable_loop](#swayimgviewerenable_loop): Enable or disable image list loop mode
-  * [swayimg.viewer.limit_preload](#swayimgviewerlimit_preload): Set max number of images to preload in background thread
-  * [swayimg.viewer.limit_history](#swayimgviewerlimit_history): Set max number of previously viewed images stored in the cache
-  * [swayimg.viewer.mark_image](#swayimgviewermark_image): Set, clear or toggle mark for currently viewed/selected image
-  * [swayimg.viewer.set_mark_color](#swayimgviewerset_mark_color): Set mark icon color
-  * [swayimg.viewer.set_pinch_factor](#swayimgviewerset_pinch_factor): Set the pinch gesture factor
-  * [swayimg.viewer.bind_reset](#swayimgviewerbind_reset): Remove all existing key/mouse/signal bindings
-  * [swayimg.viewer.on_key](#swayimgvieweron_key): Bind the key press event to a handler
-  * [swayimg.viewer.on_mouse](#swayimgvieweron_mouse): Bind the mouse button press event to a handler
-  * [swayimg.viewer.on_signal](#swayimgvieweron_signal): Bind the signal event to a handler
-  * [swayimg.viewer.on_image_change](#swayimgvieweron_image_change): Add a callback function called when a new image is opened/selected
-  * [swayimg.viewer.set_text](#swayimgviewerset_text): Set text layer scheme
+  * [swayimg.viewer.autopos](#swayimgviewerautopos): Automatic image positioning
+  * [swayimg.viewer.loop](#swayimgviewerloop): Image list loop mode
+  * [swayimg.viewer.default_scale](#swayimgviewerdefault_scale): |fixed_scale_t
+  * [swayimg.viewer.default_position](#swayimgviewerdefault_position): Default image position for newly opened images
+  * [swayimg.viewer.scale](#swayimgviewerscale): Absolute scale value (1.0 = 100%)
+  * [swayimg.viewer.animation](#swayimgvieweranimation): Stop/resume and get animation status
+  * [swayimg.viewer.frame](#swayimgviewerframe): Currently displayed frame number
+  * [swayimg.viewer.drag_button](#swayimgviewerdrag_button): Mouse button used for drag image around the window
+  * [swayimg.viewer.focus_radius](#swayimgviewerfocus_radius): Focus area radius in pixels (0 to disable focus mode)
+  * [swayimg.viewer.focus_factor](#swayimgviewerfocus_factor): Dimming factor for unfocused area (0.0=black, 1.0=transparent)
+  * [swayimg.viewer.preload](#swayimgviewerpreload): Max number of images to preload in background thread
+  * [swayimg.viewer.history](#swayimgviewerhistory): Max number of previously viewed images stored in the cache
+  * [swayimg.viewer.mark_color](#swayimgviewermark_color): Mark icon color
+  * [swayimg.viewer.pinch_factor](#swayimgviewerpinch_factor): Pinch gesture factor
+  * [swayimg.viewer.text](#swayimgviewertext): Text layer scheme
+  * [swayimg.viewer.switch_image()](#swayimgviewerswitch_image): Open the next file in the specified direction
+  * [swayimg.viewer.open()](#swayimgvieweropen): Open the next file in the specified direction
+  * [swayimg.viewer.open_path()](#swayimgvieweropen_path): Open the file at the specified path
+  * [swayimg.viewer.get_image()](#swayimgviewerget_image): Get information about currently displayed image
+  * [swayimg.viewer.reload()](#swayimgviewerreload): Reload current image
+  * [swayimg.viewer.set_abs_scale()](#swayimgviewerset_abs_scale): Set absolute image scale
+  * [swayimg.viewer.set_fix_scale()](#swayimgviewerset_fix_scale): Set fixed scale for currently displayed image
+  * [swayimg.viewer.reset()](#swayimgviewerreset): Reset position and scale to default values
+  * [swayimg.viewer.get_position()](#swayimgviewerget_position): Get image position
+  * [swayimg.viewer.set_abs_position()](#swayimgviewerset_abs_position): Set absolute image position
+  * [swayimg.viewer.set_fix_position()](#swayimgviewerset_fix_position): Set fixed image position
+  * [swayimg.viewer.flip_vertical()](#swayimgviewerflip_vertical): Flip image vertically
+  * [swayimg.viewer.flip_horizontal()](#swayimgviewerflip_horizontal): Flip image horizontally
+  * [swayimg.viewer.rotate()](#swayimgviewerrotate): Rotate image
+  * [swayimg.viewer.export()](#swayimgviewerexport): Export currently displayed frame to PNG file
+  * [swayimg.viewer.set_meta()](#swayimgviewerset_meta): Add/replace/remove meta info for currently displayed image
+  * [swayimg.viewer.set_window_background()](#swayimgviewerset_window_background): Set window background color or extension mode
+  * [swayimg.viewer.set_image_background()](#swayimgviewerset_image_background): Set background color for transparent images
+  * [swayimg.viewer.set_image_chessboard()](#swayimgviewerset_image_chessboard): Set parameters for chessboard used as background for transparent images
+  * [swayimg.viewer.mark_image()](#swayimgviewermark_image): Set, clear or toggle mark for currently viewed/selected image
+  * [swayimg.viewer.bind_reset()](#swayimgviewerbind_reset): Remove all existing key/mouse/signal bindings
+  * [swayimg.viewer.on_key()](#swayimgvieweron_key): Bind the key press event to a handler
+  * [swayimg.viewer.on_unassigned_key()](#swayimgvieweron_unassigned_key): Set handler for unassigned keys
+  * [swayimg.viewer.on_scroll()](#swayimgvieweron_scroll): Set handler for scrolling
+  * [swayimg.viewer.on_mouse()](#swayimgvieweron_mouse): Bind the mouse button press event to a handler
+  * [swayimg.viewer.on_signal()](#swayimgvieweron_signal): Bind the signal event to a handler
+  * [swayimg.viewer.on_image_change()](#swayimgvieweron_image_change): Set a callback function called when a new image is opened/selected
 * Slide show mode
-  * [swayimg.slideshow.set_timeout](#swayimgslideshowset_timeout): Set a timeout after which next image should be opened
-  * [swayimg.slideshow.switch_image](#swayimgslideshowswitch_image): Open the next file in the specified direction
-  * [swayimg.slideshow.open](#swayimgslideshowopen): Open the file at the specified path
-  * [swayimg.slideshow.get_image](#swayimgslideshowget_image): Get information about currently displayed image
-  * [swayimg.slideshow.reload](#swayimgslideshowreload): Reload current image
-  * [swayimg.slideshow.reset](#swayimgslideshowreset): Reset position and scale to default values
-  * [swayimg.slideshow.get_scale](#swayimgslideshowget_scale): Get current image scale
-  * [swayimg.slideshow.set_abs_scale](#swayimgslideshowset_abs_scale): Set absolute image scale
-  * [swayimg.slideshow.set_fix_scale](#swayimgslideshowset_fix_scale): Set fixed scale for currently displayed image
-  * [swayimg.slideshow.set_default_scale](#swayimgslideshowset_default_scale): Set default image scale for newly opened images
-  * [swayimg.slideshow.get_position](#swayimgslideshowget_position): Get image position
-  * [swayimg.slideshow.set_abs_position](#swayimgslideshowset_abs_position): Set absolute image position
-  * [swayimg.slideshow.set_fix_position](#swayimgslideshowset_fix_position): Set fixed image position
-  * [swayimg.slideshow.set_default_position](#swayimgslideshowset_default_position): Set default image position for newly opened images
-  * [swayimg.slideshow.next_frame](#swayimgslideshownext_frame): Show next frame from multi-frame image (animation)
-  * [swayimg.slideshow.prev_frame](#swayimgslideshowprev_frame): Show previous frame from multi-frame image (animation)
-  * [swayimg.slideshow.set_animation](#swayimgslideshowset_animation): Stop/resume animation
-  * [swayimg.slideshow.get_animation](#swayimgslideshowget_animation): Get current status of animation
-  * [swayimg.slideshow.animation_stop](#swayimgslideshowanimation_stop): Stop animation
-  * [swayimg.slideshow.animation_resume](#swayimgslideshowanimation_resume): Resume animation
-  * [swayimg.slideshow.flip_vertical](#swayimgslideshowflip_vertical): Flip image vertically
-  * [swayimg.slideshow.flip_horizontal](#swayimgslideshowflip_horizontal): Flip image horizontally
-  * [swayimg.slideshow.rotate](#swayimgslideshowrotate): Rotate image
-  * [swayimg.slideshow.export](#swayimgslideshowexport): Export currently displayed frame to PNG file
-  * [swayimg.slideshow.set_meta](#swayimgslideshowset_meta): Add/replace/remove meta info for currently displayed image
-  * [swayimg.slideshow.set_drag_button](#swayimgslideshowset_drag_button): Set the mouse button used to drag the image around the window
-  * [swayimg.slideshow.set_window_background](#swayimgslideshowset_window_background): Set window background color and mode
-  * [swayimg.slideshow.set_image_background](#swayimgslideshowset_image_background): Set background color for transparent images
-  * [swayimg.slideshow.set_image_chessboard](#swayimgslideshowset_image_chessboard): Set parameters for chessboard used as background for transparent images
-  * [swayimg.slideshow.enable_centering](#swayimgslideshowenable_centering): Enable or disable automatic image centering
-  * [swayimg.slideshow.enable_loop](#swayimgslideshowenable_loop): Enable or disable image list loop mode
-  * [swayimg.slideshow.limit_preload](#swayimgslideshowlimit_preload): Set max number of images to preload in background thread
-  * [swayimg.slideshow.limit_history](#swayimgslideshowlimit_history): Set max number of previously viewed images stored in the cache
-  * [swayimg.slideshow.mark_image](#swayimgslideshowmark_image): Set, clear or toggle mark for currently viewed/selected image
-  * [swayimg.slideshow.set_mark_color](#swayimgslideshowset_mark_color): Set mark icon color
-  * [swayimg.slideshow.set_pinch_factor](#swayimgslideshowset_pinch_factor): Set the pinch gesture factor
-  * [swayimg.slideshow.bind_reset](#swayimgslideshowbind_reset): Remove all existing key/mouse/signal bindings
-  * [swayimg.slideshow.on_key](#swayimgslideshowon_key): Bind the key press event to a handler
-  * [swayimg.slideshow.on_mouse](#swayimgslideshowon_mouse): Bind the mouse button press event to a handler
-  * [swayimg.slideshow.on_signal](#swayimgslideshowon_signal): Bind the signal event to a handler
-  * [swayimg.slideshow.on_image_change](#swayimgslideshowon_image_change): Add a callback function called when a new image is opened/selected
-  * [swayimg.slideshow.set_text](#swayimgslideshowset_text): Set text layer scheme
+  * [swayimg.slideshow.timeout](#swayimgslideshowtimeout): Timeout in seconds after which next image should be opened
+  * [swayimg.slideshow.autopos](#swayimgslideshowautopos): Automatic image positioning
+  * [swayimg.slideshow.loop](#swayimgslideshowloop): Image list loop mode
+  * [swayimg.slideshow.default_scale](#swayimgslideshowdefault_scale): |fixed_scale_t
+  * [swayimg.slideshow.default_position](#swayimgslideshowdefault_position): Default image position for newly opened images
+  * [swayimg.slideshow.scale](#swayimgslideshowscale): Absolute scale value (1.0 = 100%)
+  * [swayimg.slideshow.animation](#swayimgslideshowanimation): Stop/resume and get animation status
+  * [swayimg.slideshow.frame](#swayimgslideshowframe): Currently displayed frame number
+  * [swayimg.slideshow.drag_button](#swayimgslideshowdrag_button): Mouse button used for drag image around the window
+  * [swayimg.slideshow.focus_radius](#swayimgslideshowfocus_radius): Focus area radius in pixels (0 to disable focus mode)
+  * [swayimg.slideshow.focus_factor](#swayimgslideshowfocus_factor): Dimming factor for unfocused area (0.0=black, 1.0=transparent)
+  * [swayimg.slideshow.preload](#swayimgslideshowpreload): Max number of images to preload in background thread
+  * [swayimg.slideshow.history](#swayimgslideshowhistory): Max number of previously viewed images stored in the cache
+  * [swayimg.slideshow.mark_color](#swayimgslideshowmark_color): Mark icon color
+  * [swayimg.slideshow.pinch_factor](#swayimgslideshowpinch_factor): Pinch gesture factor
+  * [swayimg.slideshow.text](#swayimgslideshowtext): Text layer scheme
+  * [swayimg.slideshow.switch_image()](#swayimgslideshowswitch_image): Open the next file in the specified direction
+  * [swayimg.slideshow.open()](#swayimgslideshowopen): Open the next file in the specified direction
+  * [swayimg.slideshow.open_path()](#swayimgslideshowopen_path): Open the file at the specified path
+  * [swayimg.slideshow.get_image()](#swayimgslideshowget_image): Get information about currently displayed image
+  * [swayimg.slideshow.reload()](#swayimgslideshowreload): Reload current image
+  * [swayimg.slideshow.set_abs_scale()](#swayimgslideshowset_abs_scale): Set absolute image scale
+  * [swayimg.slideshow.set_fix_scale()](#swayimgslideshowset_fix_scale): Set fixed scale for currently displayed image
+  * [swayimg.slideshow.reset()](#swayimgslideshowreset): Reset position and scale to default values
+  * [swayimg.slideshow.get_position()](#swayimgslideshowget_position): Get image position
+  * [swayimg.slideshow.set_abs_position()](#swayimgslideshowset_abs_position): Set absolute image position
+  * [swayimg.slideshow.set_fix_position()](#swayimgslideshowset_fix_position): Set fixed image position
+  * [swayimg.slideshow.flip_vertical()](#swayimgslideshowflip_vertical): Flip image vertically
+  * [swayimg.slideshow.flip_horizontal()](#swayimgslideshowflip_horizontal): Flip image horizontally
+  * [swayimg.slideshow.rotate()](#swayimgslideshowrotate): Rotate image
+  * [swayimg.slideshow.export()](#swayimgslideshowexport): Export currently displayed frame to PNG file
+  * [swayimg.slideshow.set_meta()](#swayimgslideshowset_meta): Add/replace/remove meta info for currently displayed image
+  * [swayimg.slideshow.set_window_background()](#swayimgslideshowset_window_background): Set window background color or extension mode
+  * [swayimg.slideshow.set_image_background()](#swayimgslideshowset_image_background): Set background color for transparent images
+  * [swayimg.slideshow.set_image_chessboard()](#swayimgslideshowset_image_chessboard): Set parameters for chessboard used as background for transparent images
+  * [swayimg.slideshow.mark_image()](#swayimgslideshowmark_image): Set, clear or toggle mark for currently viewed/selected image
+  * [swayimg.slideshow.bind_reset()](#swayimgslideshowbind_reset): Remove all existing key/mouse/signal bindings
+  * [swayimg.slideshow.on_key()](#swayimgslideshowon_key): Bind the key press event to a handler
+  * [swayimg.slideshow.on_unassigned_key()](#swayimgslideshowon_unassigned_key): Set handler for unassigned keys
+  * [swayimg.slideshow.on_scroll()](#swayimgslideshowon_scroll): Set handler for scrolling
+  * [swayimg.slideshow.on_mouse()](#swayimgslideshowon_mouse): Bind the mouse button press event to a handler
+  * [swayimg.slideshow.on_signal()](#swayimgslideshowon_signal): Bind the signal event to a handler
+  * [swayimg.slideshow.on_image_change()](#swayimgslideshowon_image_change): Set a callback function called when a new image is opened/selected
 * Gallery mode
-  * [swayimg.gallery.switch_image](#swayimggalleryswitch_image): Select the next thumbnail from the gallery
-  * [swayimg.gallery.reload](#swayimggalleryreload): Reload thumbnails
-  * [swayimg.gallery.get_image](#swayimggalleryget_image): Get information about currently selected image entry
-  * [swayimg.gallery.set_aspect](#swayimggalleryset_aspect): Set thumbnail aspect ratio
-  * [swayimg.gallery.get_thumb_size](#swayimggalleryget_thumb_size): Get thumbnail size
-  * [swayimg.gallery.set_thumb_size](#swayimggalleryset_thumb_size): Set thumbnail size
-  * [swayimg.gallery.set_padding_size](#swayimggalleryset_padding_size): Set the padding size between thumbnails
-  * [swayimg.gallery.set_border_size](#swayimggalleryset_border_size): Set the border size for currently selected thumbnail
-  * [swayimg.gallery.set_border_color](#swayimggalleryset_border_color): Set border color for currently selected thumbnail
-  * [swayimg.gallery.set_selected_scale](#swayimggalleryset_selected_scale): Set the scale factor for currently selected thumbnail
-  * [swayimg.gallery.set_selected_color](#swayimggalleryset_selected_color): Set background color for currently selected thumbnail
-  * [swayimg.gallery.set_unselected_color](#swayimggalleryset_unselected_color): Set background color for unselected thumbnails
-  * [swayimg.gallery.set_window_color](#swayimggalleryset_window_color): Set window background color
-  * [swayimg.gallery.enable_hover](#swayimggalleryenable_hover): Enable or disable thumbnail selection on mouse hover
-  * [swayimg.gallery.limit_cache](#swayimggallerylimit_cache): Set max number of thumbnails stored in memory cache
-  * [swayimg.gallery.enable_preload](#swayimggalleryenable_preload): Enable or disable preloading invisible thumbnails
-  * [swayimg.gallery.enable_embedded_thumb](#swayimggalleryenable_embedded_thumb): Enable or disable using embedded thumbnails
-  * [swayimg.gallery.enable_pstore](#swayimggalleryenable_pstore): Enable or disable persistent storage for thumbnails
-  * [swayimg.gallery.set_pstore_path](#swayimggalleryset_pstore_path): Set custom path for persistent storage for thumbnails
-  * [swayimg.gallery.mark_image](#swayimggallerymark_image): Set, clear or toggle mark for currently viewed/selected image
-  * [swayimg.gallery.set_mark_color](#swayimggalleryset_mark_color): Set mark icon color
-  * [swayimg.gallery.set_pinch_factor](#swayimggalleryset_pinch_factor): Set the pinch gesture factor
-  * [swayimg.gallery.bind_reset](#swayimggallerybind_reset): Remove all existing key/mouse/signal bindings
-  * [swayimg.gallery.on_key](#swayimggalleryon_key): Bind the key press event to a handler
-  * [swayimg.gallery.on_mouse](#swayimggalleryon_mouse): Bind the mouse button press event to a handler
-  * [swayimg.gallery.on_signal](#swayimggalleryon_signal): Bind the signal event to a handler
-  * [swayimg.gallery.on_image_change](#swayimggalleryon_image_change): Add a callback function called when a new image is opened/selected
-  * [swayimg.gallery.set_text](#swayimggalleryset_text): Set text layer scheme
+  * [swayimg.gallery.aspect](#swayimggalleryaspect): Thumbnail aspect ratio
+  * [swayimg.gallery.thumb_size](#swayimggallerythumb_size): Thumbnail size in pixels
+  * [swayimg.gallery.padding_size](#swayimggallerypadding_size): Padding size in pixels between thumbnails
+  * [swayimg.gallery.border_size](#swayimggalleryborder_size): Border size in pixels for currently selected thumbnail
+  * [swayimg.gallery.selected_scale](#swayimggalleryselected_scale): Scale factor for currently selected thumbnail
+  * [swayimg.gallery.window_color](#swayimggallerywindow_color): Background color
+  * [swayimg.gallery.unselected_color](#swayimggalleryunselected_color): Background color for unselected thumbnails
+  * [swayimg.gallery.selected_color](#swayimggalleryselected_color): Background color for currently selected thumbnail
+  * [swayimg.gallery.border_color](#swayimggalleryborder_color): Border color for currently selected thumbnail
+  * [swayimg.gallery.hover](#swayimggalleryhover): Change current thumbnail on mouse hover
+  * [swayimg.gallery.pstore](#swayimggallerypstore): Use persistent storage for thumbnails
+  * [swayimg.gallery.pstore_path](#swayimggallerypstore_path): Path for thumbnails persistent storage
+  * [swayimg.gallery.preload](#swayimggallerypreload): Preload invisible thumbnails
+  * [swayimg.gallery.cache](#swayimggallerycache): Max number of invisible thumbnails stored in memory cache
+  * [swayimg.gallery.embedded_thumb](#swayimggalleryembedded_thumb): Use embedded thumbnails
+  * [swayimg.gallery.mark_color](#swayimggallerymark_color): Mark icon color
+  * [swayimg.gallery.pinch_factor](#swayimggallerypinch_factor): Pinch gesture factor
+  * [swayimg.gallery.text](#swayimggallerytext): Text layer scheme
+  * [swayimg.gallery.switch_image()](#swayimggalleryswitch_image): Select the next thumbnail from the gallery
+  * [swayimg.gallery.select()](#swayimggalleryselect): Select the next thumbnail from the gallery
+  * [swayimg.gallery.select_at()](#swayimggalleryselect_at): Select the thumbnail at specified position
+  * [swayimg.gallery.select_path()](#swayimggalleryselect_path): Select the thumbnail by image path
+  * [swayimg.gallery.reload()](#swayimggalleryreload): Reload thumbnails
+  * [swayimg.gallery.get_image()](#swayimggalleryget_image): Get information about currently selected image entry
+  * [swayimg.gallery.mark_image()](#swayimggallerymark_image): Set, clear or toggle mark for currently viewed/selected image
+  * [swayimg.gallery.bind_reset()](#swayimggallerybind_reset): Remove all existing key/mouse/signal bindings
+  * [swayimg.gallery.on_key()](#swayimggalleryon_key): Bind the key press event to a handler
+  * [swayimg.gallery.on_unassigned_key()](#swayimggalleryon_unassigned_key): Set handler for unassigned keys
+  * [swayimg.gallery.on_scroll()](#swayimggalleryon_scroll): Set handler for scrolling
+  * [swayimg.gallery.on_mouse()](#swayimggalleryon_mouse): Bind the mouse button press event to a handler
+  * [swayimg.gallery.on_signal()](#swayimggalleryon_signal): Bind the signal event to a handler
+  * [swayimg.gallery.on_image_change()](#swayimggalleryon_image_change): Set a callback function called when a new image is opened/selected
 
 ## General functionality
+
+### swayimg.appid
+
+```lua
+swayimg.appid: string
+```
+
+Application Id.
+
+Since 5.5.
+
+This field can be set only at program startup.
+
+### swayimg.mode
+
+```lua
+swayimg.mode: appmode_t
+```
+
+Application mode.
+
+Since 5.5.
+
+Setting this field changes the current mode (viewer/slideshow/gallery).
+
+`appmode_t` - Application mode:
+* `"viewer"`: Image viewer mode
+* `"slideshow"`: Slide show mode
+* `"gallery"`: Gallery mode
+
+### swayimg.fullscreen
+
+```lua
+swayimg.fullscreen: boolean
+```
+
+Full screen mode.
+
+Since 5.5.
+
+### swayimg.dnd_button
+
+```lua
+swayimg.dnd_button: mbutton_t
+```
+
+Mouse button used for drag-and-drop image file to external apps.
+
+Since 5.5.
+
+Write-only field which can be set at startup.
+
+`mbutton_t` - Mouse buttons:
+* `"MouseLeft"`: Left mouse button
+* `"MouseRight"`: Right mouse button
+* `"MouseMiddle"`: Middle mouse button
+* `"MouseSide"`: Side mouse button
+* `"MouseExtra"`: Extra mouse button
+
+### swayimg.overlay
+
+```lua
+swayimg.overlay: boolean
+```
+
+Window overlay mode.
+
+Since 5.5.
+
+Write-only field which can be set at startup.
+
+Create a floating window with the same coordinates and size as the currently focused window.
+
+Applicable only in Wayland, the corresponding protocol must be supported by the composer.
+
+By default enabled in Sway and disabled in other compositors.
+
+### swayimg.decoration
+
+```lua
+swayimg.decoration: boolean
+```
+
+Window decoration (title, border, buttons).
+
+Since 5.5.
+
+Write-only field which can be set at startup.
+
+Applicable only in Wayland, the corresponding protocol must be supported by the composer.
+
+By default disabled in Sway and enabled in other compositors.
+
+### swayimg.antialiasing
+
+```lua
+swayimg.antialiasing: boolean
+```
+
+Anti-aliasing mode.
+
+Since 5.5.
+
+### swayimg.exif_orientation
+
+```lua
+swayimg.exif_orientation: boolean
+```
+
+Automatic orientation based on EXIF.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.format_conf
+
+```lua
+swayimg.format_conf: table
+```
+
+Custom image format parameters.
+
+Since 5.6.
+
+Write-only field.
+
+Supported parameters:
+* `raw`:
+  * `enable`: Enable decoder
+  * `camera_wb`: Fix colors using white balance from camera
+* `ttf`:
+  * `enable`: Enable decoder
+  * `text`: Text to render
+  * `color`: Text color
+  * `background`: Background color
+* `video`:
+  * `enable`: Enable decoder
+  * `size`: Size (width) of a single tile (frame)
+  * `columns`: Number of columns in storyboard
+  * `rows`: Number of rows in storyboard
+  * `padding`: Gap between frames in pixels
+  * `label`: Label color in gallery mode
+
+### swayimg.title
+
+```lua
+swayimg.title: string
+```
+
+Window title.
+
+Since 5.5.
+
+Write-only field.
 
 ### swayimg.exit
 
@@ -205,53 +364,7 @@ Exit from application.
 
 Since 5.0.
 
-@_param_ `code` - Program exit code, `0` by default
-
-### swayimg.set_mode
-
-```lua
-swayimg.set_mode(mode: appmode_t)
-```
-
-Switch to specified mode.
-
-Since 5.0.
-
-@_param_ `mode` - Mode to activate
-
-`appmode_t`, Application mode:
-* `"viewer"`: Image viewer mode
-* `"slideshow"`: Slide show mode
-* `"gallery"`: Gallery mode
-
-### swayimg.get_mode
-
-```lua
-swayimg.get_mode() -> appmode_t
-```
-
-Get current mode.
-
-Since 5.0.
-
-@_return_ - Currently active mode
-
-`appmode_t`, Application mode:
-* `"viewer"`: Image viewer mode
-* `"slideshow"`: Slide show mode
-* `"gallery"`: Gallery mode
-
-### swayimg.set_title
-
-```lua
-swayimg.set_title(title: string)
-```
-
-Set title for main application window.
-
-Since 5.0.
-
-@_param_ `title` - Window title text
+@_param_ `code?` - Program exit code, `0` by default
 
 ### swayimg.get_window_size
 
@@ -282,10 +395,10 @@ Since 5.0.
 ### swayimg.on_window_resize
 
 ```lua
-swayimg.on_window_resize(fn: function)
+swayimg.on_window_resize(fn: function?)
 ```
 
-Add a callback function called when main window is resized.
+Set a callback function called when main window is resized.
 
 Since 5.0.
 
@@ -303,191 +416,161 @@ Since 5.0.
 
 @_return_ - Coordinates of the mouse pointer
 
-### swayimg.set_fullscreen
-
-```lua
-swayimg.set_fullscreen(enable?: boolean)
-```
-
-Enable/disable or toggle full screen mode.
-
-Since 5.2.
-
-@_param_ `enable` - Enable/disable full screen, empty to toggle
-
-### swayimg.get_fullscreen
-
-```lua
-swayimg.get_fullscreen() -> boolean
-```
-
-Get current full screen mode status.
-
-Since 5.2.
-
-@_return_ - True if full screen is enabled
-
-### swayimg.toggle_fullscreen
-
-```lua
-swayimg.toggle_fullscreen() -> boolean
-```
-
-Toggle full screen mode.
-
-Since 5.0.
-
-WARNING: This function is deprecated, use `swayimg.set_fullscreen` instead.
-
-See [swayimg.set_fullscreen](#swayimgset_fullscreen)
-
-See [swayimg.get_fullscreen](#swayimgget_fullscreen)
-
-@_return_ - True if full screen is enabled
-
 ### swayimg.on_initialized
 
 ```lua
 swayimg.on_initialized(fn: function)
 ```
 
-Add a callback function called when all subsystems have been initialized.
+Set a callback function called when all subsystems have been initialized.
 
 Since 5.0.
 
 @_param_ `fn` - Initialization completion notification handler
 
-### swayimg.enable_antialiasing
+### swayimg.on_redrawn
 
 ```lua
-swayimg.enable_antialiasing(enable: boolean)
+swayimg.on_redrawn(fn: function?)
 ```
 
-Enable or disable antialiasing.
+Set a callback function called after the window is drawn.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `enable` - Enable/disable antialiasing
+@_param_ `fn` - Function to execute
 
-### swayimg.enable_exif_orientation
+### swayimg.on_dnd
 
 ```lua
-swayimg.enable_exif_orientation(enable: boolean)
+swayimg.on_dnd(fn: function?)
 ```
 
-Enable or disable changing orientation based on EXIF.
+Set a callback function called on drag-and-drop operations.
 
-Since 5.1.
+Since 5.7.
 
-@_param_ `enable` - Enable/disable orientation change
+@_param_ `fn` - DnD handler: `fn(files)`
 
-### swayimg.set_format_params
+### swayimg.defer
 
 ```lua
-swayimg.set_format_params(name: string, params: table)
+swayimg.defer(seconds: number, fn: function)
 ```
 
-Setting format parameters.
+Execute deferred procedure.
 
-Since 5.3.
+Since 5.5.
 
-Supported parameters:
-* `raw`:
-  * `camera_wb`: Fix colors using white balance from camera
+@_param_ `seconds` - Delay in seconds (can be fractional)
 
-@_param_ `name` - Format name (e.g. `raw`)
-
-@_param_ `params` - Table of parameters (e.g. `{ camera_wb = true }`)
-
-### swayimg.enable_decoration
-
-```lua
-swayimg.enable_decoration(enable: boolean)
-```
-
-Enable or disable window decoration (title, border, buttons).
-
-Since 5.0.
-
-This function can only be called at program startup.
-Applicable only in Wayland, the corresponding protocol must be supported by
-the composer.
-By default disabled in Sway and enabled in other compositors.
-
-@_param_ `enable` - Enable/disable window decoration
-
-### swayimg.enable_overlay
-
-```lua
-swayimg.enable_overlay(enable: boolean)
-```
-
-Enable or disable window overlay mode.
-
-Since 5.0.
-
-Create a floating window with the same coordinates and size as the currently
-focused window.
-This function can only be called at program startup.
-Applicable only in Sway and Hyprland compositors.
-By default enabled in Sway and disabled in other compositors.
-
-@_param_ `enable` - Enable/disable overlay mode
-
-### swayimg.set_appid
-
-```lua
-swayimg.set_appid(appid: string)
-```
-
-Set application Id, default is `swayimg`.
-
-Since 5.3.
-
-This function can only be called at program startup.
-
-@_param_ `appid` - Application ID
-
-### swayimg.get_appid
-
-```lua
-swayimg.get_appid() -> string
-```
-
-Get application Id.
-
-Since 5.3.
-
-
-@_return_ - Application ID
-
-### swayimg.set_dnd_button
-
-```lua
-swayimg.set_dnd_button(button: string)
-```
-
-Set mouse button used for drag-and-drop image file to external apps.
-
-Since 5.0.
-
-This function can only be called at program startup.
-
-@_param_ `button` - Mouse button used for drag-n-drop, for example `MouseRight`
+@_param_ `fn` - Function to execute
 
 ## Image list
+
+### swayimg.imagelist.order
+
+```lua
+swayimg.imagelist.order: order_t
+```
+
+Sort order of the image list.
+
+Since 5.5.
+
+`order_t` - Image list order:
+* `"none"`: Unsorted (system-dependent)
+* `"alpha"`: Lexicographic sort: 1,10,2,20,a,b,c
+* `"numeric"`: Numeric sort: 1,2,3,10,100,a,b,c
+* `"mtime"`: Modification time sort
+* `"size"`: Size sort
+* `"random"`: Random order
+
+### swayimg.imagelist.reverse
+
+```lua
+swayimg.imagelist.reverse: boolean
+```
+
+Reverse the image list order.
+
+Since 5.5.
+
+### swayimg.imagelist.recursive
+
+```lua
+swayimg.imagelist.recursive: boolean
+```
+
+Recursive directory reading.
+
+Since 5.5.
+
+### swayimg.imagelist.adjacent
+
+```lua
+swayimg.imagelist.adjacent: boolean
+```
+
+Adding adjacent files from the same directory.
+
+Since 5.5.
+
+### swayimg.imagelist.fsmon
+
+```lua
+swayimg.imagelist.fsmon: boolean
+```
+
+File system monitoring.
+
+Since 5.5.
 
 ### swayimg.imagelist.size
 
 ```lua
-swayimg.imagelist.size() -> integer
+swayimg.imagelist.size: integer
 ```
 
-Get number of entries in the image list.
+Total number of entries in the image list.
+
+Since 5.5.
+
+Read-only field.
+
+### swayimg.imagelist.add
+
+```lua
+swayimg.imagelist.add(paths: string|string[])
+```
+
+Add entries to the image list.
 
 Since 5.0.
 
-@_return_ - Size of the image list
+@_param_ `paths` - Paths to add
+
+### swayimg.imagelist.remove
+
+```lua
+swayimg.imagelist.remove(paths: string|string[])
+```
+
+Remove specified entries from the image list.
+
+Since 5.0.
+
+@_param_ `paths` - Paths to remove
+
+### swayimg.imagelist.clear
+
+```lua
+swayimg.imagelist.clear()
+```
+
+Clear the image list.
+
+Since 5.3.
 
 ### swayimg.imagelist.get
 
@@ -501,282 +584,388 @@ Since 5.0.
 
 @_return_ - Array with all file entries
 
-### swayimg.imagelist.add
-
-```lua
-swayimg.imagelist.add(path: string)
-```
-
-Add entry to the image list.
-
-Since 5.0.
-
-@_param_ `path` - Path to add
-
-### swayimg.imagelist.remove
-
-```lua
-swayimg.imagelist.remove(path: string)
-```
-
-Remove entry from the image list.
-
-Since 5.0.
-
-@_param_ `path` - Path to remove
-
-### swayimg.imagelist.set_order
-
-```lua
-swayimg.imagelist.set_order(order: order_t)
-```
-
-Set sort order of the image list.
-
-Since 5.0.
-
-@_param_ `order` - List order
-
-`order_t`, Image list order:
-* `"none"`: Unsorted (system-dependent)
-* `"alpha"`: Lexicographic sort: 1,10,2,20,a,b,c
-* `"numeric"`: Numeric sort: 1,2,3,10,100,a,b,c
-* `"mtime"`: Modification time sort
-* `"size"`: Size sort
-* `"random"`: Random order
-
-### swayimg.imagelist.enable_reverse
-
-```lua
-swayimg.imagelist.enable_reverse(enable: boolean)
-```
-
-Enable or disable reverse order.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable reverse order
-
-### swayimg.imagelist.enable_recursive
-
-```lua
-swayimg.imagelist.enable_recursive(enable: boolean)
-```
-
-Enable or disable recursive directory reading.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable recursive mode
-
-### swayimg.imagelist.enable_adjacent
-
-```lua
-swayimg.imagelist.enable_adjacent(enable: boolean)
-```
-
-Enable or disable adding adjacent files from the same directory.
-
-Since 5.0.
-
-This function can only be called at program startup.
-
-@_param_ `enable` - Enable/disable adding adjacent files
-
-### swayimg.imagelist.enable_fsmon
-
-```lua
-swayimg.imagelist.enable_fsmon(enable: boolean)
-```
-
-Enable or disable file system monitoring.
-
-Since 5.1.
-
-@_param_ `enable` - Enable/disable FS monitor
-
-## Text layer
-
-### swayimg.text.show
-
-```lua
-swayimg.text.show()
-```
-
-Force show the text layer.
-
-Since 5.0.
-
-This function restarts the timer.
-
-See [swayimg.text.set_timer](#swayimgtextset_timer)
-
-### swayimg.text.hide
-
-```lua
-swayimg.text.hide()
-```
-
-Hide the text layer.
-
-Since 5.0.
+## Text overlay layer
 
 ### swayimg.text.visible
 
 ```lua
-swayimg.text.visible() -> boolean
+swayimg.text.visible: boolean
 ```
 
-Check if text layer is visible.
+Text overlay state.
 
-Since 5.0.
+Since 5.5.
 
-@_return_ - `true` if text layer is visible
-
-### swayimg.text.set_font
+### swayimg.text.timeout
 
 ```lua
-swayimg.text.set_font(name: string)
+swayimg.text.timeout: number
 ```
 
-Set font face.
+Timeout in seconds after which the entire text layer will be hidden.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `name` - Font name
+Write-only field.
 
-### swayimg.text.set_size
+### swayimg.text.status_timeout
 
 ```lua
-swayimg.text.set_size(size: integer)
+swayimg.text.status_timeout: number
 ```
 
-Set font size.
+Timeout in seconds after which the status message will be hidden.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `size` - Font size in pixels
+Write-only field.
 
-### swayimg.text.set_spacing
+### swayimg.text.font
 
 ```lua
-swayimg.text.set_spacing(size: integer)
+swayimg.text.font: string
 ```
 
-Set line spacing.
+Font name.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `size` - Line spacing in pixels, can be negative
+Write-only field.
 
-### swayimg.text.set_padding
+### swayimg.text.size
 
 ```lua
-swayimg.text.set_padding(size: integer)
+swayimg.text.size: integer
 ```
 
-Set the padding from the window edges.
+Font size in pixels.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `size` - Padding size in pixels
+Write-only field.
 
-### swayimg.text.set_foreground
+### swayimg.text.spacing
 
 ```lua
-swayimg.text.set_foreground(color: color_t)
+swayimg.text.spacing: integer
 ```
 
-Set foreground text color.
+Line spacing in pixels.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `color` - Foreground text color
+Write-only field.
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.text.set_background
+### swayimg.text.padding
 
 ```lua
-swayimg.text.set_background(color: color_t)
+swayimg.text.padding: integer
 ```
 
-Set background text color.
+Padding from the window edges in pixels.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `color` - Background text color
+This is write-only field.
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.text.set_shadow
+### swayimg.text.color
 
 ```lua
-swayimg.text.set_shadow(color: color_t)
+swayimg.text.color: color_t
 ```
 
-Set shadow text color.
+Foreground text color.
 
-Since 5.0.
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.text.background
+
+```lua
+swayimg.text.background: color_t
+```
+
+Background text color.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.text.shadow
+
+```lua
+swayimg.text.shadow: color_t
+```
+
+Shadow text color.
+
+Since 5.5.
+
+Write-only field.
 
 Setting alpha channel to `0` disables shadows.
 
-@_param_ `color` - Shadow text color
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.text.set_timeout
+### swayimg.text.status
 
 ```lua
-swayimg.text.set_timeout(seconds: number)
+swayimg.text.status: string
 ```
 
-Set a timeout after which the entire text layer will be hidden.
+Status message.
 
-Since 5.0.
+Since 5.5.
 
-Setting the timeout value to `0` disables the timer and causes the overlay
-to be displayed continuously.
+Write-only field.
 
-@_param_ `seconds` - Timeout in seconds
-
-### swayimg.text.set_status_timeout
-
-```lua
-swayimg.text.set_status_timeout(seconds: number)
-```
-
-Set a timeout after which the status message will be hidden.
-
-Since 5.0.
-
-Setting the timeout value to `0` disables the timer and causes the status
-message to be displayed continuously.
-
-See [swayimg.text.set_status](#swayimgtextset_status)
-
-@_param_ `seconds` - Timeout in seconds
-
-### swayimg.text.set_status
-
-```lua
-swayimg.text.set_status(status: string)
-```
-
-Show status message.
-
-Since 5.0.
-
-Multi-line text is separated by `\n`.
-
-See [swayimg.text.set_status_timer](#swayimgtextset_status_timer)
-
-@_param_ `status` - Status text to show
+Multi-line text should be separated by new line character `\n`.
 
 ## Viewer mode
+
+### swayimg.viewer.autopos
+
+```lua
+swayimg.viewer.autopos: autopos_t
+```
+
+Automatic image positioning.
+
+Since 5.7.
+
+Write-only field.
+
+`autopos_t` - Automatic image positioning:
+* `"free"`: Free move mode
+* `"center"`: Images smaller than the window size will be centered
+* `"follow"`: Images larger than the window will follow the pointer
+
+### swayimg.viewer.loop
+
+```lua
+swayimg.viewer.loop: boolean
+```
+
+Image list loop mode.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.viewer.default_scale
+
+```lua
+swayimg.viewer.default_scale: number
+```
+
+|fixed_scale_t.
+
+Default image scale for newly opened images.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.viewer.default_position
+
+```lua
+swayimg.viewer.default_position: fixed_position_t
+```
+
+Default image position for newly opened images.
+
+Since 5.5.
+
+Write-only field.
+
+`fixed_position_t` - Fixed position for images in viewer and slideshow modes:
+* `"center"`: Vertical and horizontal center of the window
+* `"topcenter"`: Top (vertical) and center (horizontal) of the window
+* `"bottomcenter"`: Bottom (vertical) and center (horizontal) of the window
+* `"leftcenter"`: Left (horizontal) and center (vertical) of the window
+* `"rightcenter"`: Right (horizontal) and center (vertical) of the window
+* `"topleft"`: Top left corner of the window
+* `"topright"`: Top right corner of the window
+* `"bottomleft"`: Bottom left corner of the window
+* `"bottomright"`: Bottom right corner of the window
+
+### swayimg.viewer.scale
+
+```lua
+swayimg.viewer.scale: number
+```
+
+Absolute scale value (1.0 = 100%).
+
+Since 5.5.
+
+### swayimg.viewer.animation
+
+```lua
+swayimg.viewer.animation: boolean
+```
+
+Stop/resume and get animation status.
+
+Since 5.5.
+
+### swayimg.viewer.frame
+
+```lua
+swayimg.viewer.frame: integer
+```
+
+Currently displayed frame number.
+
+Since 5.5.
+
+Setting this field stops animation.
+
+### swayimg.viewer.drag_button
+
+```lua
+swayimg.viewer.drag_button: mbutton_t
+```
+
+Mouse button used for drag image around the window.
+
+Since 5.5.
+
+Write-only field.
+
+`mbutton_t` - Mouse buttons:
+* `"MouseLeft"`: Left mouse button
+* `"MouseRight"`: Right mouse button
+* `"MouseMiddle"`: Middle mouse button
+* `"MouseSide"`: Side mouse button
+* `"MouseExtra"`: Extra mouse button
+
+### swayimg.viewer.focus_radius
+
+```lua
+swayimg.viewer.focus_radius: integer
+```
+
+Focus area radius in pixels (0 to disable focus mode).
+
+Since 5.7.
+
+Write-only field.
+
+### swayimg.viewer.focus_factor
+
+```lua
+swayimg.viewer.focus_factor: number
+```
+
+Dimming factor for unfocused area (0.0=black, 1.0=transparent).
+
+Since 5.7.
+
+Write-only field.
+
+### swayimg.viewer.preload
+
+```lua
+swayimg.viewer.preload: integer
+```
+
+Max number of images to preload in background thread.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.viewer.history
+
+```lua
+swayimg.viewer.history: integer
+```
+
+Max number of previously viewed images stored in the cache.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.viewer.mark_color
+
+```lua
+swayimg.viewer.mark_color: color_t
+```
+
+Mark icon color.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.viewer.pinch_factor
+
+```lua
+swayimg.viewer.pinch_factor: number
+```
+
+Pinch gesture factor.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.viewer.text
+
+```lua
+swayimg.viewer.text: table
+```
+
+Text layer scheme.
+
+Since 5.6.
+
+Write-only field.
+
+The scheme is described as a map "block position -> array of string templates".
+
+The block position can be one of the following:
+* `topleft`: Top left corner of the window
+* `topright`: Top right corner of the window
+* `bottomleft`: Bottom left corner of the window
+* `bottomright`: Bottom right corner of the window
+
+The template string includes text and fields surrounded by curly braces:
+* `{name}`: File name of the currently viewed/selected image
+* `{dir}`: Parent directory name of the currently viewed/selected image
+* `{path}`: Absolute path to the currently viewed/selected image
+* `{size}`: File size in bytes
+* `{sizehr}`: File size in human-readable format
+* `{time}`: File modification time
+* `{format}`: Brief image format descriptio
+* `{scale}`: Current image scale in percent
+* `{list.index}`: Current index of image in the image list
+* `{list.total}`: Total number of files in the image list
+* `{frame.index}`: Current frame index
+* `{frame.total}`: Total number of frames
+* `{frame.width}`: Current frame width in pixels
+* `{frame.height}`: Current frame height in pixels
+* `{meta.*}`: Image meta info:  EXIF, XMP, IPTC tags, free text tags etc
+
+To print `{` character escape it with `{{`.
+
+The template string may contain a tab character to separate key/value pairs,
+in this case the text block will be aligned with the longest key.
+
+If the value cannot be output (for example, the specified EXIF tag is missing),
+then the entire string including the key is ignored upon printing.
+
+List of available EXIF/XMP/IPTC tags can be found at [Exiv2 website](https://exiv2.org/tags.html)
+or printed using utility exiv2: `exiv2 -pa photo.jpg`.
 
 ### swayimg.viewer.switch_image
 
@@ -788,9 +977,13 @@ Open the next file in the specified direction.
 
 Since 5.0.
 
+WARNING: This function is deprecated, use `swayimg.viewer.open` instead.
+
+See [swayimg.viewer.open](#swayimgvieweropen).
+
 @_param_ `dir` - Next file direction
 
-`vdir_t`, Direction for opening next file in viewer and slideshow modes:
+`vdir_t` - Direction for opening next file in viewer and slideshow modes:
 * `"first"`: First file in image list
 * `"last"`: Last file in image list
 * `"next"`: Next file
@@ -802,21 +995,46 @@ Since 5.0.
 ### swayimg.viewer.open
 
 ```lua
-swayimg.viewer.open(path: string)
+swayimg.viewer.open(dir: vdir_t) -> boolean
+```
+
+Open the next file in the specified direction.
+
+Since 5.5.
+
+@_param_ `dir` - Next file direction
+
+`vdir_t` - Direction for opening next file in viewer and slideshow modes:
+* `"first"`: First file in image list
+* `"last"`: Last file in image list
+* `"next"`: Next file
+* `"prev"`: Previous file
+* `"next_dir"`: First file in next directory
+* `"prev_dir"`: Last file in previous directory
+* `"random"`: Random file in image list
+
+@_return_ - True if next file was opened
+
+### swayimg.viewer.open_path
+
+```lua
+swayimg.viewer.open_path(path: string) -> boolean
 ```
 
 Open the file at the specified path.
 
-Since 5.2.
+Since 5.5.
 
 This function adds a file to the image list and then opens it in the viewer.
 
 @_param_ `path` - Path to the file
 
+@_return_ - True if file was opened
+
 ### swayimg.viewer.get_image
 
 ```lua
-swayimg.viewer.get_image() -> swayimg.image
+swayimg.viewer.get_image() -> swayimg.image?
 ```
 
 Get information about currently displayed image.
@@ -835,32 +1053,6 @@ Reload current image.
 
 Since 5.1.
 
-### swayimg.viewer.reset
-
-```lua
-swayimg.viewer.reset()
-```
-
-Reset position and scale to default values.
-
-Since 5.0.
-
-See [swayimg.viewer.set_default_scale](#swayimgviewerset_default_scale)
-
-See [swayimg.viewer.set_default_position](#swayimgviewerset_default_position)
-
-### swayimg.viewer.get_scale
-
-```lua
-swayimg.viewer.get_scale() -> number
-```
-
-Get current image scale.
-
-Since 5.0.
-
-@_return_ - Absolute scale value (1.0 = 100%)
-
 ### swayimg.viewer.set_abs_scale
 
 ```lua
@@ -873,9 +1065,9 @@ Since 5.0.
 
 @_param_ `scale` - Absolute value (1.0 = 100%)
 
-@_param_ `x` - X coordinate of center point, empty for window center
+@_param_ `x?` - X coordinate of center point, empty for window center
 
-@_param_ `y` - Y coordinate of center point, empty for window center
+@_param_ `y?` - Y coordinate of center point, empty for window center
 
 ### swayimg.viewer.set_fix_scale
 
@@ -889,7 +1081,7 @@ Since 5.0.
 
 @_param_ `scale` - Fixed scale name
 
-`fixed_scale_t`, Fixed scale for images in viewer and slideshow modes:
+`fixed_scale_t` - Fixed scale for images in viewer and slideshow modes:
 * `"optimal"`: 100% or less to fit to window
 * `"width"`: Fit image width to window width
 * `"height"`: Fit image height to window height
@@ -898,26 +1090,19 @@ Since 5.0.
 * `"real"`: Real size (100%)
 * `"keep"`: Keep the same scale as for previously viewed image
 
-### swayimg.viewer.set_default_scale
+### swayimg.viewer.reset
 
 ```lua
-swayimg.viewer.set_default_scale(scale: number|fixed_scale_t)
+swayimg.viewer.reset()
 ```
 
-Set default image scale for newly opened images.
+Reset position and scale to default values.
 
 Since 5.0.
 
-@_param_ `scale` - Absolute value (1.0 = 100%) or one the predefined names
+See [swayimg.viewer.set_default_scale](#swayimgviewerset_default_scale).
 
-`fixed_scale_t`, Fixed scale for images in viewer and slideshow modes:
-* `"optimal"`: 100% or less to fit to window
-* `"width"`: Fit image width to window width
-* `"height"`: Fit image height to window height
-* `"fit"`: Fit to window
-* `"fill"`: Crop image to fill the window
-* `"real"`: Real size (100%)
-* `"keep"`: Keep the same scale as for previously viewed image
+See [swayimg.viewer.set_default_position](#swayimgviewerset_default_position).
 
 ### swayimg.viewer.get_position
 
@@ -957,7 +1142,7 @@ Since 5.0.
 
 @_param_ `pos` - Fixed image position
 
-`fixed_position_t`, Fixed position for images in viewer and slideshow modes:
+`fixed_position_t` - Fixed position for images in viewer and slideshow modes:
 * `"center"`: Vertical and horizontal center of the window
 * `"topcenter"`: Top (vertical) and center (horizontal) of the window
 * `"bottomcenter"`: Bottom (vertical) and center (horizontal) of the window
@@ -967,109 +1152,6 @@ Since 5.0.
 * `"topright"`: Top right corner of the window
 * `"bottomleft"`: Bottom left corner of the window
 * `"bottomright"`: Bottom right corner of the window
-
-### swayimg.viewer.set_default_position
-
-```lua
-swayimg.viewer.set_default_position(pos: fixed_position_t)
-```
-
-Set default image position for newly opened images.
-
-Since 5.0.
-
-@_param_ `pos` - Fixed image position
-
-`fixed_position_t`, Fixed position for images in viewer and slideshow modes:
-* `"center"`: Vertical and horizontal center of the window
-* `"topcenter"`: Top (vertical) and center (horizontal) of the window
-* `"bottomcenter"`: Bottom (vertical) and center (horizontal) of the window
-* `"leftcenter"`: Left (horizontal) and center (vertical) of the window
-* `"rightcenter"`: Right (horizontal) and center (vertical) of the window
-* `"topleft"`: Top left corner of the window
-* `"topright"`: Top right corner of the window
-* `"bottomleft"`: Bottom left corner of the window
-* `"bottomright"`: Bottom right corner of the window
-
-### swayimg.viewer.next_frame
-
-```lua
-swayimg.viewer.next_frame() -> integer
-```
-
-Show next frame from multi-frame image (animation).
-
-Since 5.0.
-
-This function stops the animation.
-
-@_return_ - Index of the currently shown frame
-
-### swayimg.viewer.prev_frame
-
-```lua
-swayimg.viewer.prev_frame() -> integer
-```
-
-Show previous frame from multi-frame image (animation).
-
-Since 5.0.
-
-This function stops the animation.
-
-@_return_ - Index of the currently shown frame
-
-### swayimg.viewer.set_animation
-
-```lua
-swayimg.viewer.set_animation(enable?: boolean)
-```
-
-Stop/resume animation.
-
-Since 5.2.
-
-@_param_ `enable` - Enable/disable animation, empty to toggle
-
-### swayimg.viewer.get_animation
-
-```lua
-swayimg.viewer.get_animation() -> boolean
-```
-
-Get current status of animation.
-
-Since 5.2.
-
-@_return_ - true if animation is running
-
-### swayimg.viewer.animation_stop
-
-```lua
-swayimg.viewer.animation_stop()
-```
-
-Stop animation.
-
-Since 5.0.
-
-WARNING: This function is deprecated, use `swayimg.viewer.set_animation` instead.
-
-See [swayimg.viewer.set_animation](#swayimgviewerset_animation)
-
-### swayimg.viewer.animation_resume
-
-```lua
-swayimg.viewer.animation_resume()
-```
-
-Resume animation.
-
-Since 5.0.
-
-WARNING: This function is deprecated, use `swayimg.viewer.set_animation` instead.
-
-See [swayimg.viewer.set_animation](#swayimgviewerset_animation)
 
 ### swayimg.viewer.flip_vertical
 
@@ -1103,7 +1185,7 @@ Since 5.0.
 
 @_param_ `angle` - Rotation angle
 
-`rotation_t`, Fixed rotation angles for images in viewer and slideshow modes:
+`rotation_t` - Fixed rotation angles for images in viewer and slideshow modes:
 * `90`: 90 degrees
 * `180`: 180 degrees
 * `270`: 270 degrees
@@ -1134,34 +1216,20 @@ Since 5.0.
 
 @_param_ `value` - Meta value, empty value to remove the record
 
-### swayimg.viewer.set_drag_button
-
-```lua
-swayimg.viewer.set_drag_button(button: string)
-```
-
-Set the mouse button used to drag the image around the window.
-
-Since 5.0.
-
-@_param_ `button` - Mouse button name, for example `MouseLeft`
-
 ### swayimg.viewer.set_window_background
 
 ```lua
 swayimg.viewer.set_window_background(bkg: color_t|bkgmode_t)
 ```
 
-Set window background color and mode.
+Set window background color or extension mode.
 
 Since 5.0.
 
 @_param_ `bkg` - Solid color or one of the predefined mode
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-`bkgmode_t`, Fixed rotation angles for images in viewer and slideshow modes:
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+`bkgmode_t` - Fixed rotation angles for images in viewer and slideshow modes:
 * `"extend"`: Fill window with the current image and blur it
 * `"mirror"`: Fill window with the mirrored current image and blur it
 * `"auto"`: Fill the window background in `extend` or `mirror` mode depending on the image aspect ratio
@@ -1180,8 +1248,7 @@ This disables chessboard drawing.
 
 @_param_ `color` - Background color
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
 
 ### swayimg.viewer.set_image_chessboard
 
@@ -1199,61 +1266,11 @@ This enables the chessboard if this feature was previously disabled.
 
 @_param_ `color1` - First color
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
 
 @_param_ `color2` - Second color
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.viewer.enable_centering
-
-```lua
-swayimg.viewer.enable_centering(enable: boolean)
-```
-
-Enable or disable automatic image centering.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable automatic image centering
-
-### swayimg.viewer.enable_loop
-
-```lua
-swayimg.viewer.enable_loop(enable: boolean)
-```
-
-Enable or disable image list loop mode.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable flag to set
-
-### swayimg.viewer.limit_preload
-
-```lua
-swayimg.viewer.limit_preload(size: integer)
-```
-
-Set max number of images to preload in background thread.
-
-Since 5.0.
-
-@_param_ `size` - Number of images to preload
-
-### swayimg.viewer.limit_history
-
-```lua
-swayimg.viewer.limit_history(size: integer)
-```
-
-Set max number of previously viewed images stored in the cache.
-
-Since 5.0.
-
-@_param_ `size` - Number of images to store
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
 
 ### swayimg.viewer.mark_image
 
@@ -1265,34 +1282,7 @@ Set, clear or toggle mark for currently viewed/selected image.
 
 Since 5.0.
 
-@_param_ `state` - Mark state to set, toggle if the state is not specified
-
-### swayimg.viewer.set_mark_color
-
-```lua
-swayimg.viewer.set_mark_color(color: color_t)
-```
-
-Set mark icon color.
-
-Since 5.0.
-
-@_param_ `color` - Mark icon color
-
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.viewer.set_pinch_factor
-
-```lua
-swayimg.viewer.set_pinch_factor(factor: number)
-```
-
-Set the pinch gesture factor.
-
-Since 5.2.
-
-@_param_ `factor` - Pinch gesture factor
+@_param_ `state?` - Mark state to set, toggle if the state is not specified
 
 ### swayimg.viewer.bind_reset
 
@@ -1307,7 +1297,7 @@ Since 5.0.
 ### swayimg.viewer.on_key
 
 ```lua
-swayimg.viewer.on_key(key: string, fn: function)
+swayimg.viewer.on_key(key: string|string[], fn: function)
 ```
 
 Bind the key press event to a handler.
@@ -1318,10 +1308,34 @@ Since 5.0.
 
 @_param_ `fn` - Key press handler
 
+### swayimg.viewer.on_unassigned_key
+
+```lua
+swayimg.viewer.on_unassigned_key(fn: function)
+```
+
+Set handler for unassigned keys.
+
+Since 5.6.
+
+@_param_ `fn` - Key press handler, the first arg contains key name
+
+### swayimg.viewer.on_scroll
+
+```lua
+swayimg.viewer.on_scroll(fn: fun(kmods: string, horizontal: number, vertical: number))
+```
+
+Set handler for scrolling.
+
+Since 5.7.
+
+@_param_ `fn` - Scroll handler
+
 ### swayimg.viewer.on_mouse
 
 ```lua
-swayimg.viewer.on_mouse(button: string, fn: function)
+swayimg.viewer.on_mouse(button: mbutton_t, fn: function)
 ```
 
 Bind the mouse button press event to a handler.
@@ -1329,6 +1343,13 @@ Bind the mouse button press event to a handler.
 Since 5.0.
 
 @_param_ `button` - Button description, for example `Ctrl-Alt-MouseRight`
+
+`mbutton_t` - Mouse buttons:
+* `"MouseLeft"`: Left mouse button
+* `"MouseRight"`: Right mouse button
+* `"MouseMiddle"`: Middle mouse button
+* `"MouseSide"`: Side mouse button
+* `"MouseExtra"`: Extra mouse button
 
 @_param_ `fn` - Button press handler
 
@@ -1349,39 +1370,239 @@ Since 5.0.
 ### swayimg.viewer.on_image_change
 
 ```lua
-swayimg.viewer.on_image_change(fn: function)
+swayimg.viewer.on_image_change(fn: function?)
 ```
 
-Add a callback function called when a new image is opened/selected.
+Set a callback function called when a new image is opened/selected.
 
 Since 5.0.
 
 @_param_ `fn` - Handler for notifications about changing the current image
 
-### swayimg.viewer.set_text
+## Slide show mode
+
+### swayimg.slideshow.timeout
 
 ```lua
-swayimg.viewer.set_text(pos: block_position_t, scheme: text_template_t[])
+swayimg.slideshow.timeout: number
 ```
 
-Set text layer scheme.
+Timeout in seconds after which next image should be opened.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `pos` - Text block position
+### swayimg.slideshow.autopos
 
-`block_position_t`, Position of text block:
+```lua
+swayimg.slideshow.autopos: autopos_t
+```
+
+Automatic image positioning.
+
+Since 5.7.
+
+Write-only field.
+
+`autopos_t` - Automatic image positioning:
+* `"free"`: Free move mode
+* `"center"`: Images smaller than the window size will be centered
+* `"follow"`: Images larger than the window will follow the pointer
+
+### swayimg.slideshow.loop
+
+```lua
+swayimg.slideshow.loop: boolean
+```
+
+Image list loop mode.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.slideshow.default_scale
+
+```lua
+swayimg.slideshow.default_scale: number
+```
+
+|fixed_scale_t.
+
+Default image scale for newly opened images.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.slideshow.default_position
+
+```lua
+swayimg.slideshow.default_position: fixed_position_t
+```
+
+Default image position for newly opened images.
+
+Since 5.5.
+
+Write-only field.
+
+`fixed_position_t` - Fixed position for images in viewer and slideshow modes:
+* `"center"`: Vertical and horizontal center of the window
+* `"topcenter"`: Top (vertical) and center (horizontal) of the window
+* `"bottomcenter"`: Bottom (vertical) and center (horizontal) of the window
+* `"leftcenter"`: Left (horizontal) and center (vertical) of the window
+* `"rightcenter"`: Right (horizontal) and center (vertical) of the window
 * `"topleft"`: Top left corner of the window
 * `"topright"`: Top right corner of the window
 * `"bottomleft"`: Bottom left corner of the window
 * `"bottomright"`: Bottom right corner of the window
 
-@_param_ `scheme` - Array of line templates with overlay scheme
+### swayimg.slideshow.scale
 
-`text_template_t`:
-Template for text overlay line.
-The template includes text and fields surrounded by curly braces.
-The following fields are supported:
+```lua
+swayimg.slideshow.scale: number
+```
+
+Absolute scale value (1.0 = 100%).
+
+Since 5.5.
+
+### swayimg.slideshow.animation
+
+```lua
+swayimg.slideshow.animation: boolean
+```
+
+Stop/resume and get animation status.
+
+Since 5.5.
+
+### swayimg.slideshow.frame
+
+```lua
+swayimg.slideshow.frame: integer
+```
+
+Currently displayed frame number.
+
+Since 5.5.
+
+Setting this field stops animation.
+
+### swayimg.slideshow.drag_button
+
+```lua
+swayimg.slideshow.drag_button: mbutton_t
+```
+
+Mouse button used for drag image around the window.
+
+Since 5.5.
+
+Write-only field.
+
+`mbutton_t` - Mouse buttons:
+* `"MouseLeft"`: Left mouse button
+* `"MouseRight"`: Right mouse button
+* `"MouseMiddle"`: Middle mouse button
+* `"MouseSide"`: Side mouse button
+* `"MouseExtra"`: Extra mouse button
+
+### swayimg.slideshow.focus_radius
+
+```lua
+swayimg.slideshow.focus_radius: integer
+```
+
+Focus area radius in pixels (0 to disable focus mode).
+
+Since 5.7.
+
+Write-only field.
+
+### swayimg.slideshow.focus_factor
+
+```lua
+swayimg.slideshow.focus_factor: number
+```
+
+Dimming factor for unfocused area (0.0=black, 1.0=transparent).
+
+Since 5.7.
+
+Write-only field.
+
+### swayimg.slideshow.preload
+
+```lua
+swayimg.slideshow.preload: integer
+```
+
+Max number of images to preload in background thread.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.slideshow.history
+
+```lua
+swayimg.slideshow.history: integer
+```
+
+Max number of previously viewed images stored in the cache.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.slideshow.mark_color
+
+```lua
+swayimg.slideshow.mark_color: color_t
+```
+
+Mark icon color.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.slideshow.pinch_factor
+
+```lua
+swayimg.slideshow.pinch_factor: number
+```
+
+Pinch gesture factor.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.slideshow.text
+
+```lua
+swayimg.slideshow.text: table
+```
+
+Text layer scheme.
+
+Since 5.6.
+
+Write-only field.
+
+The scheme is described as a map "block position -> array of string templates".
+
+The block position can be one of the following:
+* `topleft`: Top left corner of the window
+* `topright`: Top right corner of the window
+* `bottomleft`: Bottom left corner of the window
+* `bottomright`: Bottom right corner of the window
+
+The template string includes text and fields surrounded by curly braces:
 * `{name}`: File name of the currently viewed/selected image
 * `{dir}`: Parent directory name of the currently viewed/selected image
 * `{path}`: Absolute path to the currently viewed/selected image
@@ -1396,32 +1617,18 @@ The following fields are supported:
 * `{frame.total}`: Total number of frames
 * `{frame.width}`: Current frame width in pixels
 * `{frame.height}`: Current frame height in pixels
-* `{meta.*}`: Image meta info: EXIF, tags etc. List of available EXIF tags
-  can be found at [Exiv2 website](https://exiv2.org/tags.html) or printed
-  using utility exiv2: `exiv2 -pa photo.jpg`
+* `{meta.*}`: Image meta info:  EXIF, XMP, IPTC tags, free text tags etc
 
 To print `{` character escape it with `{{`.
 
-The template string may contain a tab character to separate key/value pairs.
-In this case, the text block will be aligned with the longest key.
-If the value cannot be output (for example, the specified EXIF tag is
-missing), then the entire string including the key is ignored upon printing.
+The template string may contain a tab character to separate key/value pairs,
+in this case the text block will be aligned with the longest key.
 
-Example: `Path to image:\t{path}`
+If the value cannot be output (for example, the specified EXIF tag is missing),
+then the entire string including the key is ignored upon printing.
 
-## Slide show mode
-
-### swayimg.slideshow.set_timeout
-
-```lua
-swayimg.slideshow.set_timeout(seconds: number)
-```
-
-Set a timeout after which next image should be opened.
-
-Since 5.0.
-
-@_param_ `seconds` - Timeout in seconds
+List of available EXIF/XMP/IPTC tags can be found at [Exiv2 website](https://exiv2.org/tags.html)
+or printed using utility exiv2: `exiv2 -pa photo.jpg`.
 
 ### swayimg.slideshow.switch_image
 
@@ -1433,9 +1640,13 @@ Open the next file in the specified direction.
 
 Since 5.0.
 
+WARNING: This function is deprecated, use `swayimg.viewer.open` instead.
+
+See [swayimg.viewer.open](#swayimgvieweropen).
+
 @_param_ `dir` - Next file direction
 
-`vdir_t`, Direction for opening next file in viewer and slideshow modes:
+`vdir_t` - Direction for opening next file in viewer and slideshow modes:
 * `"first"`: First file in image list
 * `"last"`: Last file in image list
 * `"next"`: Next file
@@ -1447,21 +1658,46 @@ Since 5.0.
 ### swayimg.slideshow.open
 
 ```lua
-swayimg.slideshow.open(path: string)
+swayimg.slideshow.open(dir: vdir_t) -> boolean
+```
+
+Open the next file in the specified direction.
+
+Since 5.5.
+
+@_param_ `dir` - Next file direction
+
+`vdir_t` - Direction for opening next file in viewer and slideshow modes:
+* `"first"`: First file in image list
+* `"last"`: Last file in image list
+* `"next"`: Next file
+* `"prev"`: Previous file
+* `"next_dir"`: First file in next directory
+* `"prev_dir"`: Last file in previous directory
+* `"random"`: Random file in image list
+
+@_return_ - True if next file was opened
+
+### swayimg.slideshow.open_path
+
+```lua
+swayimg.slideshow.open_path(path: string) -> boolean
 ```
 
 Open the file at the specified path.
 
-Since 5.2.
+Since 5.5.
 
 This function adds a file to the image list and then opens it in the viewer.
 
 @_param_ `path` - Path to the file
 
+@_return_ - True if file was opened
+
 ### swayimg.slideshow.get_image
 
 ```lua
-swayimg.slideshow.get_image() -> swayimg.image
+swayimg.slideshow.get_image() -> swayimg.image?
 ```
 
 Get information about currently displayed image.
@@ -1480,32 +1716,6 @@ Reload current image.
 
 Since 5.1.
 
-### swayimg.slideshow.reset
-
-```lua
-swayimg.slideshow.reset()
-```
-
-Reset position and scale to default values.
-
-Since 5.0.
-
-See [swayimg.viewer.set_default_scale](#swayimgviewerset_default_scale)
-
-See [swayimg.viewer.set_default_position](#swayimgviewerset_default_position)
-
-### swayimg.slideshow.get_scale
-
-```lua
-swayimg.slideshow.get_scale() -> number
-```
-
-Get current image scale.
-
-Since 5.0.
-
-@_return_ - Absolute scale value (1.0 = 100%)
-
 ### swayimg.slideshow.set_abs_scale
 
 ```lua
@@ -1518,9 +1728,9 @@ Since 5.0.
 
 @_param_ `scale` - Absolute value (1.0 = 100%)
 
-@_param_ `x` - X coordinate of center point, empty for window center
+@_param_ `x?` - X coordinate of center point, empty for window center
 
-@_param_ `y` - Y coordinate of center point, empty for window center
+@_param_ `y?` - Y coordinate of center point, empty for window center
 
 ### swayimg.slideshow.set_fix_scale
 
@@ -1534,7 +1744,7 @@ Since 5.0.
 
 @_param_ `scale` - Fixed scale name
 
-`fixed_scale_t`, Fixed scale for images in viewer and slideshow modes:
+`fixed_scale_t` - Fixed scale for images in viewer and slideshow modes:
 * `"optimal"`: 100% or less to fit to window
 * `"width"`: Fit image width to window width
 * `"height"`: Fit image height to window height
@@ -1543,26 +1753,19 @@ Since 5.0.
 * `"real"`: Real size (100%)
 * `"keep"`: Keep the same scale as for previously viewed image
 
-### swayimg.slideshow.set_default_scale
+### swayimg.slideshow.reset
 
 ```lua
-swayimg.slideshow.set_default_scale(scale: number|fixed_scale_t)
+swayimg.slideshow.reset()
 ```
 
-Set default image scale for newly opened images.
+Reset position and scale to default values.
 
 Since 5.0.
 
-@_param_ `scale` - Absolute value (1.0 = 100%) or one the predefined names
+See [swayimg.viewer.set_default_scale](#swayimgviewerset_default_scale).
 
-`fixed_scale_t`, Fixed scale for images in viewer and slideshow modes:
-* `"optimal"`: 100% or less to fit to window
-* `"width"`: Fit image width to window width
-* `"height"`: Fit image height to window height
-* `"fit"`: Fit to window
-* `"fill"`: Crop image to fill the window
-* `"real"`: Real size (100%)
-* `"keep"`: Keep the same scale as for previously viewed image
+See [swayimg.viewer.set_default_position](#swayimgviewerset_default_position).
 
 ### swayimg.slideshow.get_position
 
@@ -1602,7 +1805,7 @@ Since 5.0.
 
 @_param_ `pos` - Fixed image position
 
-`fixed_position_t`, Fixed position for images in viewer and slideshow modes:
+`fixed_position_t` - Fixed position for images in viewer and slideshow modes:
 * `"center"`: Vertical and horizontal center of the window
 * `"topcenter"`: Top (vertical) and center (horizontal) of the window
 * `"bottomcenter"`: Bottom (vertical) and center (horizontal) of the window
@@ -1612,109 +1815,6 @@ Since 5.0.
 * `"topright"`: Top right corner of the window
 * `"bottomleft"`: Bottom left corner of the window
 * `"bottomright"`: Bottom right corner of the window
-
-### swayimg.slideshow.set_default_position
-
-```lua
-swayimg.slideshow.set_default_position(pos: fixed_position_t)
-```
-
-Set default image position for newly opened images.
-
-Since 5.0.
-
-@_param_ `pos` - Fixed image position
-
-`fixed_position_t`, Fixed position for images in viewer and slideshow modes:
-* `"center"`: Vertical and horizontal center of the window
-* `"topcenter"`: Top (vertical) and center (horizontal) of the window
-* `"bottomcenter"`: Bottom (vertical) and center (horizontal) of the window
-* `"leftcenter"`: Left (horizontal) and center (vertical) of the window
-* `"rightcenter"`: Right (horizontal) and center (vertical) of the window
-* `"topleft"`: Top left corner of the window
-* `"topright"`: Top right corner of the window
-* `"bottomleft"`: Bottom left corner of the window
-* `"bottomright"`: Bottom right corner of the window
-
-### swayimg.slideshow.next_frame
-
-```lua
-swayimg.slideshow.next_frame() -> integer
-```
-
-Show next frame from multi-frame image (animation).
-
-Since 5.0.
-
-This function stops the animation.
-
-@_return_ - Index of the currently shown frame
-
-### swayimg.slideshow.prev_frame
-
-```lua
-swayimg.slideshow.prev_frame() -> integer
-```
-
-Show previous frame from multi-frame image (animation).
-
-Since 5.0.
-
-This function stops the animation.
-
-@_return_ - Index of the currently shown frame
-
-### swayimg.slideshow.set_animation
-
-```lua
-swayimg.slideshow.set_animation(enable?: boolean)
-```
-
-Stop/resume animation.
-
-Since 5.2.
-
-@_param_ `enable` - Enable/disable animation, empty to toggle
-
-### swayimg.slideshow.get_animation
-
-```lua
-swayimg.slideshow.get_animation() -> boolean
-```
-
-Get current status of animation.
-
-Since 5.2.
-
-@_return_ - true if animation is running
-
-### swayimg.slideshow.animation_stop
-
-```lua
-swayimg.slideshow.animation_stop()
-```
-
-Stop animation.
-
-Since 5.0.
-
-WARNING: This function is deprecated, use `swayimg.viewer.set_animation` instead.
-
-See [swayimg.viewer.set_animation](#swayimgviewerset_animation)
-
-### swayimg.slideshow.animation_resume
-
-```lua
-swayimg.slideshow.animation_resume()
-```
-
-Resume animation.
-
-Since 5.0.
-
-WARNING: This function is deprecated, use `swayimg.viewer.set_animation` instead.
-
-See [swayimg.viewer.set_animation](#swayimgviewerset_animation)
 
 ### swayimg.slideshow.flip_vertical
 
@@ -1748,7 +1848,7 @@ Since 5.0.
 
 @_param_ `angle` - Rotation angle
 
-`rotation_t`, Fixed rotation angles for images in viewer and slideshow modes:
+`rotation_t` - Fixed rotation angles for images in viewer and slideshow modes:
 * `90`: 90 degrees
 * `180`: 180 degrees
 * `270`: 270 degrees
@@ -1779,34 +1879,20 @@ Since 5.0.
 
 @_param_ `value` - Meta value, empty value to remove the record
 
-### swayimg.slideshow.set_drag_button
-
-```lua
-swayimg.slideshow.set_drag_button(button: string)
-```
-
-Set the mouse button used to drag the image around the window.
-
-Since 5.0.
-
-@_param_ `button` - Mouse button name, for example `MouseLeft`
-
 ### swayimg.slideshow.set_window_background
 
 ```lua
 swayimg.slideshow.set_window_background(bkg: color_t|bkgmode_t)
 ```
 
-Set window background color and mode.
+Set window background color or extension mode.
 
 Since 5.0.
 
 @_param_ `bkg` - Solid color or one of the predefined mode
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-`bkgmode_t`, Fixed rotation angles for images in viewer and slideshow modes:
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+`bkgmode_t` - Fixed rotation angles for images in viewer and slideshow modes:
 * `"extend"`: Fill window with the current image and blur it
 * `"mirror"`: Fill window with the mirrored current image and blur it
 * `"auto"`: Fill the window background in `extend` or `mirror` mode depending on the image aspect ratio
@@ -1825,8 +1911,7 @@ This disables chessboard drawing.
 
 @_param_ `color` - Background color
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
 
 ### swayimg.slideshow.set_image_chessboard
 
@@ -1844,61 +1929,11 @@ This enables the chessboard if this feature was previously disabled.
 
 @_param_ `color1` - First color
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
 
 @_param_ `color2` - Second color
 
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.slideshow.enable_centering
-
-```lua
-swayimg.slideshow.enable_centering(enable: boolean)
-```
-
-Enable or disable automatic image centering.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable automatic image centering
-
-### swayimg.slideshow.enable_loop
-
-```lua
-swayimg.slideshow.enable_loop(enable: boolean)
-```
-
-Enable or disable image list loop mode.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable flag to set
-
-### swayimg.slideshow.limit_preload
-
-```lua
-swayimg.slideshow.limit_preload(size: integer)
-```
-
-Set max number of images to preload in background thread.
-
-Since 5.0.
-
-@_param_ `size` - Number of images to preload
-
-### swayimg.slideshow.limit_history
-
-```lua
-swayimg.slideshow.limit_history(size: integer)
-```
-
-Set max number of previously viewed images stored in the cache.
-
-Since 5.0.
-
-@_param_ `size` - Number of images to store
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
 
 ### swayimg.slideshow.mark_image
 
@@ -1910,34 +1945,7 @@ Set, clear or toggle mark for currently viewed/selected image.
 
 Since 5.0.
 
-@_param_ `state` - Mark state to set, toggle if the state is not specified
-
-### swayimg.slideshow.set_mark_color
-
-```lua
-swayimg.slideshow.set_mark_color(color: color_t)
-```
-
-Set mark icon color.
-
-Since 5.0.
-
-@_param_ `color` - Mark icon color
-
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.slideshow.set_pinch_factor
-
-```lua
-swayimg.slideshow.set_pinch_factor(factor: number)
-```
-
-Set the pinch gesture factor.
-
-Since 5.2.
-
-@_param_ `factor` - Pinch gesture factor
+@_param_ `state?` - Mark state to set, toggle if the state is not specified
 
 ### swayimg.slideshow.bind_reset
 
@@ -1952,7 +1960,7 @@ Since 5.0.
 ### swayimg.slideshow.on_key
 
 ```lua
-swayimg.slideshow.on_key(key: string, fn: function)
+swayimg.slideshow.on_key(key: string|string[], fn: function)
 ```
 
 Bind the key press event to a handler.
@@ -1963,10 +1971,34 @@ Since 5.0.
 
 @_param_ `fn` - Key press handler
 
+### swayimg.slideshow.on_unassigned_key
+
+```lua
+swayimg.slideshow.on_unassigned_key(fn: function)
+```
+
+Set handler for unassigned keys.
+
+Since 5.6.
+
+@_param_ `fn` - Key press handler, the first arg contains key name
+
+### swayimg.slideshow.on_scroll
+
+```lua
+swayimg.slideshow.on_scroll(fn: fun(kmods: string, horizontal: number, vertical: number))
+```
+
+Set handler for scrolling.
+
+Since 5.7.
+
+@_param_ `fn` - Scroll handler
+
 ### swayimg.slideshow.on_mouse
 
 ```lua
-swayimg.slideshow.on_mouse(button: string, fn: function)
+swayimg.slideshow.on_mouse(button: mbutton_t, fn: function)
 ```
 
 Bind the mouse button press event to a handler.
@@ -1974,6 +2006,13 @@ Bind the mouse button press event to a handler.
 Since 5.0.
 
 @_param_ `button` - Button description, for example `Ctrl-Alt-MouseRight`
+
+`mbutton_t` - Mouse buttons:
+* `"MouseLeft"`: Left mouse button
+* `"MouseRight"`: Right mouse button
+* `"MouseMiddle"`: Middle mouse button
+* `"MouseSide"`: Side mouse button
+* `"MouseExtra"`: Extra mouse button
 
 @_param_ `fn` - Button press handler
 
@@ -1994,39 +2033,259 @@ Since 5.0.
 ### swayimg.slideshow.on_image_change
 
 ```lua
-swayimg.slideshow.on_image_change(fn: function)
+swayimg.slideshow.on_image_change(fn: function?)
 ```
 
-Add a callback function called when a new image is opened/selected.
+Set a callback function called when a new image is opened/selected.
 
 Since 5.0.
 
 @_param_ `fn` - Handler for notifications about changing the current image
 
-### swayimg.slideshow.set_text
+## Gallery mode
+
+### swayimg.gallery.aspect
 
 ```lua
-swayimg.slideshow.set_text(pos: block_position_t, scheme: text_template_t[])
+swayimg.gallery.aspect: aspect_t
 ```
 
-Set text layer scheme.
+Thumbnail aspect ratio.
 
-Since 5.0.
+Since 5.5.
 
-@_param_ `pos` - Text block position
+Write-only field.
 
-`block_position_t`, Position of text block:
-* `"topleft"`: Top left corner of the window
-* `"topright"`: Top right corner of the window
-* `"bottomleft"`: Bottom left corner of the window
-* `"bottomright"`: Bottom right corner of the window
+`aspect_t` - Aspect ratio used for thumbnails in gallery mode:
+* `"fit"`: Fit image into a square thumbnail
+* `"fill"`: Fill square thumbnail with the image
+* `"keep"`: Adjust thumbnail size to the aspect ratio of the image
 
-@_param_ `scheme` - Array of line templates with overlay scheme
+### swayimg.gallery.thumb_size
 
-`text_template_t`:
-Template for text overlay line.
-The template includes text and fields surrounded by curly braces.
-The following fields are supported:
+```lua
+swayimg.gallery.thumb_size: integer
+```
+
+Thumbnail size in pixels.
+
+Since 5.5.
+
+### swayimg.gallery.padding_size
+
+```lua
+swayimg.gallery.padding_size: integer
+```
+
+Padding size in pixels between thumbnails.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.border_size
+
+```lua
+swayimg.gallery.border_size: integer
+```
+
+Border size in pixels for currently selected thumbnail.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.selected_scale
+
+```lua
+swayimg.gallery.selected_scale: number
+```
+
+Scale factor for currently selected thumbnail.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.window_color
+
+```lua
+swayimg.gallery.window_color: color_t
+```
+
+Background color.
+
+Set window background color.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.gallery.unselected_color
+
+```lua
+swayimg.gallery.unselected_color: color_t
+```
+
+Background color for unselected thumbnails.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.gallery.selected_color
+
+```lua
+swayimg.gallery.selected_color: color_t
+```
+
+Background color for currently selected thumbnail.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.gallery.border_color
+
+```lua
+swayimg.gallery.border_color: color_t
+```
+
+Border color for currently selected thumbnail.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.gallery.hover
+
+```lua
+swayimg.gallery.hover: boolean
+```
+
+Change current thumbnail on mouse hover.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.pstore
+
+```lua
+swayimg.gallery.pstore: boolean
+```
+
+Use persistent storage for thumbnails.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.pstore_path
+
+```lua
+swayimg.gallery.pstore_path: string
+```
+
+Path for thumbnails persistent storage.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.preload
+
+```lua
+swayimg.gallery.preload: boolean
+```
+
+Preload invisible thumbnails.
+
+Since 5.5.
+
+Write-only field.
+
+The program preloads thumbnails into the cache up to the amount specified in the `cache` field.
+
+### swayimg.gallery.cache
+
+```lua
+swayimg.gallery.cache: integer
+```
+
+Max number of invisible thumbnails stored in memory cache.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.embedded_thumb
+
+```lua
+swayimg.gallery.embedded_thumb: boolean
+```
+
+Use embedded thumbnails.
+
+Since 5.5.
+
+Currently only applicable to RAW images.
+
+### swayimg.gallery.mark_color
+
+```lua
+swayimg.gallery.mark_color: color_t
+```
+
+Mark icon color.
+
+Since 5.5.
+
+Write-only field.
+
+`color_t` - ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
+
+### swayimg.gallery.pinch_factor
+
+```lua
+swayimg.gallery.pinch_factor: number
+```
+
+Pinch gesture factor.
+
+Since 5.5.
+
+Write-only field.
+
+### swayimg.gallery.text
+
+```lua
+swayimg.gallery.text: table
+```
+
+Text layer scheme.
+
+Since 5.6.
+
+Write-only field.
+
+The scheme is described as a map "block position -> array of string templates".
+
+The block position can be one of the following:
+* `topleft`: Top left corner of the window
+* `topright`: Top right corner of the window
+* `bottomleft`: Bottom left corner of the window
+* `bottomright`: Bottom right corner of the window
+
+The template string includes text and fields surrounded by curly braces:
 * `{name}`: File name of the currently viewed/selected image
 * `{dir}`: Parent directory name of the currently viewed/selected image
 * `{path}`: Absolute path to the currently viewed/selected image
@@ -2041,20 +2300,18 @@ The following fields are supported:
 * `{frame.total}`: Total number of frames
 * `{frame.width}`: Current frame width in pixels
 * `{frame.height}`: Current frame height in pixels
-* `{meta.*}`: Image meta info: EXIF, tags etc. List of available EXIF tags
-  can be found at [Exiv2 website](https://exiv2.org/tags.html) or printed
-  using utility exiv2: `exiv2 -pa photo.jpg`
+* `{meta.*}`: Image meta info:  EXIF, XMP, IPTC tags, free text tags etc
 
 To print `{` character escape it with `{{`.
 
-The template string may contain a tab character to separate key/value pairs.
-In this case, the text block will be aligned with the longest key.
-If the value cannot be output (for example, the specified EXIF tag is
-missing), then the entire string including the key is ignored upon printing.
+The template string may contain a tab character to separate key/value pairs,
+in this case the text block will be aligned with the longest key.
 
-Example: `Path to image:\t{path}`
+If the value cannot be output (for example, the specified EXIF tag is missing),
+then the entire string including the key is ignored upon printing.
 
-## Gallery mode
+List of available EXIF/XMP/IPTC tags can be found at [Exiv2 website](https://exiv2.org/tags.html)
+or printed using utility exiv2: `exiv2 -pa photo.jpg`.
 
 ### swayimg.gallery.switch_image
 
@@ -2066,9 +2323,13 @@ Select the next thumbnail from the gallery.
 
 Since 5.0.
 
+WARNING: This function is deprecated, use `swayimg.gallery.select` instead.
+
+See [swayimg.gallery.select_next](#swayimggalleryselect_next).
+
 @_param_ `dir` - Next thumbnail direction
 
-`gdir_t`, Direction for selecting next file in gallery mode:
+`gdir_t` - Direction for selecting next file in gallery mode:
 * `"first"`: Select first thumbnail in image list
 * `"last"`: Select last thumbnail in image list
 * `"up"`: Select the thumbnail above the current one
@@ -2077,6 +2338,60 @@ Since 5.0.
 * `"right"`: Select the thumbnail to the right of the current one
 * `"pgup"`: Select the thumbnail on the previous page
 * `"pgdown"`: Select the thumbnail on the next page
+
+### swayimg.gallery.select
+
+```lua
+swayimg.gallery.select(dir: gdir_t) -> boolean
+```
+
+Select the next thumbnail from the gallery.
+
+Since 5.5.
+
+@_param_ `dir` - Next thumbnail direction
+
+`gdir_t` - Direction for selecting next file in gallery mode:
+* `"first"`: Select first thumbnail in image list
+* `"last"`: Select last thumbnail in image list
+* `"up"`: Select the thumbnail above the current one
+* `"down"`: Select the thumbnail below the current one
+* `"left"`: Select the thumbnail to the left of the current one
+* `"right"`: Select the thumbnail to the right of the current one
+* `"pgup"`: Select the thumbnail on the previous page
+* `"pgdown"`: Select the thumbnail on the next page
+
+@_return_ - True if selection was changed
+
+### swayimg.gallery.select_at
+
+```lua
+swayimg.gallery.select_at(x: integer, y: integer) -> boolean
+```
+
+Select the thumbnail at specified position.
+
+Since 5.5.
+
+@_param_ `x` - X coordinate of the thumbnail
+
+@_param_ `y` - Y coordinate of the thumbnail
+
+@_return_ - True if selection was changed
+
+### swayimg.gallery.select_path
+
+```lua
+swayimg.gallery.select_path(path: string) -> boolean
+```
+
+Select the thumbnail by image path.
+
+Since 5.5.
+
+@_param_ `path` - Path to the image
+
+@_return_ - True if selection was changed
 
 ### swayimg.gallery.reload
 
@@ -2091,7 +2406,7 @@ Since 5.3.
 ### swayimg.gallery.get_image
 
 ```lua
-swayimg.gallery.get_image() -> swayimg.entry
+swayimg.gallery.get_image() -> swayimg.entry?
 ```
 
 Get information about currently selected image entry.
@@ -2099,217 +2414,6 @@ Get information about currently selected image entry.
 Since 5.0.
 
 @_return_ - Currently selected image entry
-
-### swayimg.gallery.set_aspect
-
-```lua
-swayimg.gallery.set_aspect(aspect: aspect_t)
-```
-
-Set thumbnail aspect ratio.
-
-Since 5.0.
-
-@_param_ `aspect` - Thumbnail aspect ratio
-
-`aspect_t`, Aspect ratio used for thumbnails in gallery mode:
-* `"fit"`: Fit image into a square thumbnail
-* `"fill"`: Fill square thumbnail with the image
-* `"keep"`: Adjust thumbnail size to the aspect ratio of the image
-
-### swayimg.gallery.get_thumb_size
-
-```lua
-swayimg.gallery.get_thumb_size() -> integer
-```
-
-Get thumbnail size.
-
-Since 5.0.
-
-@_return_ - Thumbnail size in pixels
-
-### swayimg.gallery.set_thumb_size
-
-```lua
-swayimg.gallery.set_thumb_size(size: integer)
-```
-
-Set thumbnail size.
-
-Since 5.0.
-
-@_param_ `size` - Thumbnail size in pixels
-
-### swayimg.gallery.set_padding_size
-
-```lua
-swayimg.gallery.set_padding_size(size: integer)
-```
-
-Set the padding size between thumbnails.
-
-Since 5.0.
-
-@_param_ `size` - Padding size in pixels
-
-### swayimg.gallery.set_border_size
-
-```lua
-swayimg.gallery.set_border_size(size: integer)
-```
-
-Set the border size for currently selected thumbnail.
-
-Since 5.0.
-
-@_param_ `size` - Border size in pixels
-
-### swayimg.gallery.set_border_color
-
-```lua
-swayimg.gallery.set_border_color(color: color_t)
-```
-
-Set border color for currently selected thumbnail.
-
-Since 5.0.
-
-@_param_ `color` - Border color
-
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.gallery.set_selected_scale
-
-```lua
-swayimg.gallery.set_selected_scale(scale: number)
-```
-
-Set the scale factor for currently selected thumbnail.
-
-Since 5.0.
-
-@_param_ `scale` - Scale factor, 1.0 = 100%
-
-### swayimg.gallery.set_selected_color
-
-```lua
-swayimg.gallery.set_selected_color(color: color_t)
-```
-
-Set background color for currently selected thumbnail.
-
-Since 5.0.
-
-@_param_ `color` - Background color
-
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.gallery.set_unselected_color
-
-```lua
-swayimg.gallery.set_unselected_color(color: color_t)
-```
-
-Set background color for unselected thumbnails.
-
-Since 5.0.
-
-@_param_ `color` - Background color
-
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.gallery.set_window_color
-
-```lua
-swayimg.gallery.set_window_color(color: color_t)
-```
-
-Set window background color.
-
-Since 5.0.
-
-@_param_ `color` - Background color
-
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.gallery.enable_hover
-
-```lua
-swayimg.gallery.enable_hover(enable: boolean)
-```
-
-Enable or disable thumbnail selection on mouse hover.
-
-Since 5.3.
-
-@_param_ `enable` - Enable/disable mouse hover selection
-
-### swayimg.gallery.limit_cache
-
-```lua
-swayimg.gallery.limit_cache(size: integer)
-```
-
-Set max number of thumbnails stored in memory cache.
-
-Since 5.0.
-
-@_param_ `size` - Cache size
-
-### swayimg.gallery.enable_preload
-
-```lua
-swayimg.gallery.enable_preload(enable: boolean)
-```
-
-Enable or disable preloading invisible thumbnails.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable preloading invisible thumbnails
-
-### swayimg.gallery.enable_embedded_thumb
-
-```lua
-swayimg.gallery.enable_embedded_thumb(enable: boolean)
-```
-
-Enable or disable using embedded thumbnails.
-
-Since 5.3.
-
-Currently only applicable to RAW images.
-
-@_param_ `enable` - Enable/disable embedded thumbnails
-
-### swayimg.gallery.enable_pstore
-
-```lua
-swayimg.gallery.enable_pstore(enable: boolean)
-```
-
-Enable or disable persistent storage for thumbnails.
-
-Since 5.0.
-
-@_param_ `enable` - Enable/disable usage of persistent storage
-
-### swayimg.gallery.set_pstore_path
-
-```lua
-swayimg.gallery.set_pstore_path(path: string)
-```
-
-Set custom path for persistent storage for thumbnails.
-
-Since 5.0.
-
-@_param_ `path` - Path to the directory
 
 ### swayimg.gallery.mark_image
 
@@ -2321,34 +2425,7 @@ Set, clear or toggle mark for currently viewed/selected image.
 
 Since 5.0.
 
-@_param_ `state` - Mark state to set, toggle if the state is not specified
-
-### swayimg.gallery.set_mark_color
-
-```lua
-swayimg.gallery.set_mark_color(color: color_t)
-```
-
-Set mark icon color.
-
-Since 5.0.
-
-@_param_ `color` - Mark icon color
-
-`color_t`:
-ARGB color in hex format: AARRGGBB, for example `0xff00aa99`
-
-### swayimg.gallery.set_pinch_factor
-
-```lua
-swayimg.gallery.set_pinch_factor(factor: number)
-```
-
-Set the pinch gesture factor.
-
-Since 5.2.
-
-@_param_ `factor` - Pinch gesture factor
+@_param_ `state?` - Mark state to set, toggle if the state is not specified
 
 ### swayimg.gallery.bind_reset
 
@@ -2363,7 +2440,7 @@ Since 5.0.
 ### swayimg.gallery.on_key
 
 ```lua
-swayimg.gallery.on_key(key: string, fn: function)
+swayimg.gallery.on_key(key: string|string[], fn: function)
 ```
 
 Bind the key press event to a handler.
@@ -2374,10 +2451,34 @@ Since 5.0.
 
 @_param_ `fn` - Key press handler
 
+### swayimg.gallery.on_unassigned_key
+
+```lua
+swayimg.gallery.on_unassigned_key(fn: function)
+```
+
+Set handler for unassigned keys.
+
+Since 5.6.
+
+@_param_ `fn` - Key press handler, the first arg contains key name
+
+### swayimg.gallery.on_scroll
+
+```lua
+swayimg.gallery.on_scroll(fn: fun(kmods: string, horizontal: number, vertical: number))
+```
+
+Set handler for scrolling.
+
+Since 5.7.
+
+@_param_ `fn` - Scroll handler
+
 ### swayimg.gallery.on_mouse
 
 ```lua
-swayimg.gallery.on_mouse(button: string, fn: function)
+swayimg.gallery.on_mouse(button: mbutton_t, fn: function)
 ```
 
 Bind the mouse button press event to a handler.
@@ -2385,6 +2486,13 @@ Bind the mouse button press event to a handler.
 Since 5.0.
 
 @_param_ `button` - Button description, for example `Ctrl-Alt-MouseRight`
+
+`mbutton_t` - Mouse buttons:
+* `"MouseLeft"`: Left mouse button
+* `"MouseRight"`: Right mouse button
+* `"MouseMiddle"`: Middle mouse button
+* `"MouseSide"`: Side mouse button
+* `"MouseExtra"`: Extra mouse button
 
 @_param_ `fn` - Button press handler
 
@@ -2405,63 +2513,11 @@ Since 5.0.
 ### swayimg.gallery.on_image_change
 
 ```lua
-swayimg.gallery.on_image_change(fn: function)
+swayimg.gallery.on_image_change(fn: function?)
 ```
 
-Add a callback function called when a new image is opened/selected.
+Set a callback function called when a new image is opened/selected.
 
 Since 5.0.
 
 @_param_ `fn` - Handler for notifications about changing the current image
-
-### swayimg.gallery.set_text
-
-```lua
-swayimg.gallery.set_text(pos: block_position_t, scheme: text_template_t[])
-```
-
-Set text layer scheme.
-
-Since 5.0.
-
-@_param_ `pos` - Text block position
-
-`block_position_t`, Position of text block:
-* `"topleft"`: Top left corner of the window
-* `"topright"`: Top right corner of the window
-* `"bottomleft"`: Bottom left corner of the window
-* `"bottomright"`: Bottom right corner of the window
-
-@_param_ `scheme` - Array of line templates with overlay scheme
-
-`text_template_t`:
-Template for text overlay line.
-The template includes text and fields surrounded by curly braces.
-The following fields are supported:
-* `{name}`: File name of the currently viewed/selected image
-* `{dir}`: Parent directory name of the currently viewed/selected image
-* `{path}`: Absolute path to the currently viewed/selected image
-* `{size}`: File size in bytes
-* `{sizehr}`: File size in human-readable format
-* `{time}`: File modification time
-* `{format}`: Brief image format descriptio
-* `{scale}`: Current image scale in percent
-* `{list.index}`: Current index of image in the image list
-* `{list.total}`: Total number of files in the image list
-* `{frame.index}`: Current frame index
-* `{frame.total}`: Total number of frames
-* `{frame.width}`: Current frame width in pixels
-* `{frame.height}`: Current frame height in pixels
-* `{meta.*}`: Image meta info: EXIF, tags etc. List of available EXIF tags
-  can be found at [Exiv2 website](https://exiv2.org/tags.html) or printed
-  using utility exiv2: `exiv2 -pa photo.jpg`
-
-To print `{` character escape it with `{{`.
-
-The template string may contain a tab character to separate key/value pairs.
-In this case, the text block will be aligned with the longest key.
-If the value cannot be output (for example, the specified EXIF tag is
-missing), then the entire string including the key is ignored upon printing.
-
-Example: `Path to image:\t{path}`
-

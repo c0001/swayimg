@@ -10,19 +10,22 @@
 #include <csetjmp>
 #include <format>
 
+namespace {
+
 class ImageFormatJpeg : public ImageFormat {
 public:
-    ImageFormatJpeg()
+    ImageFormatJpeg() noexcept
         : ImageFormat(Priority::Highest, "jpg")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (!check_signature(data, { 0xff, 0xd8 })) {
             return nullptr;
         }
 
+        ImagePtr image = std::make_shared<Image>();
         jpeg_decompress_struct jpg;
 
         // setup error handling
@@ -54,8 +57,7 @@ public:
 
         jpeg_start_decompress(&jpg);
 
-        // allocate image and frame
-        ImagePtr image = std::make_shared<Image>();
+        // allocate frame
         image->frames.resize(1);
         Pixmap& pm = image->frames[0].pm;
         pm.create(Pixmap::RGB, jpg.output_width, jpg.output_height);
@@ -79,7 +81,7 @@ public:
                 argb_t* pixel = line;
                 for (int x = jpg.output_width - 1; x >= 0; --x) {
                     const uint8_t* color =
-                        reinterpret_cast<const uint8_t*>(line) + x * 3;
+                        reinterpret_cast<const uint8_t*>(line) + x * 3UL;
                     pixel[x].a = argb_t::max;
                     pixel[x].r = color[0];
                     pixel[x].g = color[1];
@@ -89,7 +91,7 @@ public:
                 argb_t* pixel = line;
                 for (size_t x = 0; x < pm.width(); ++x) {
                     const uint8_t* color =
-                        reinterpret_cast<const uint8_t*>(line) + x * 4;
+                        reinterpret_cast<const uint8_t*>(line) + x * 4UL;
                     const double c = color[0];
                     const double m = color[1];
                     const double y = color[2];
@@ -122,11 +124,13 @@ private:
     {
         Error* err = reinterpret_cast<Error*>(jpg->err);
         char msg[JMSG_LENGTH_MAX] = { 0 };
-        (*(jpg->err->format_message))(jpg, msg);
+        (*jpg->err->format_message)(jpg, msg);
         Log::error("JPEG: {}", msg);
         longjmp(err->jump, 1);
     }
 };
 
 // register format in factory
-static ImageFormatJpeg format_jpeg;
+ImageFormatJpeg format_jpeg;
+
+} // anonymous namespace

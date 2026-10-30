@@ -4,20 +4,22 @@
 
 #include "application.hpp"
 #include "buildconf.hpp"
-#include "imageformat.hpp"
+#include "formatfactory.hpp"
 #include "log.hpp"
 
 #include <getopt.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <clocale>
 #include <cstdlib>
 #include <format>
+#include <fstream>
 #include <functional>
 #include <limits>
 #include <string>
 #include <vector>
+
+namespace {
 
 /** Command line arguments. */
 class Args {
@@ -52,7 +54,13 @@ public:
     void add(const char short_opt, const char* long_opt, const char* format,
              const char* help, const Handler& handler)
     {
-        const Arg arg { short_opt, long_opt, format, help, handler };
+        const Arg arg {
+            .short_opt = short_opt,
+            .long_opt = long_opt,
+            .format = format,
+            .help = help,
+            .handler = handler,
+        };
         assert(std::find_if(arguments.begin(), arguments.end(),
                             [arg](const Arg& exist) {
                                 return (arg.short_opt &&
@@ -68,7 +76,7 @@ public:
      * @param argv arguments array
      * @return index of the first non option argument
      */
-    int process(int argc, char* argv[])
+    int process(const int argc, char* argv[])
     {
         // fill options
         std::string optstring;
@@ -84,10 +92,10 @@ public:
                 }
             }
             longopts.push_back({
-                it.long_opt,
-                it.format ? required_argument : no_argument,
-                nullptr,
-                index++,
+                .name = it.long_opt,
+                .has_arg = it.format ? required_argument : no_argument,
+                .flag = nullptr,
+                .val = index++,
             });
         }
         longopts.push_back({});
@@ -100,7 +108,7 @@ public:
             if (opt >= LONGOPT_OFFSET) {
                 arg = &arguments[opt - LONGOPT_OFFSET];
             } else {
-                for (auto& it : arguments) {
+                for (const auto& it : arguments) {
                     if (opt == it.short_opt) {
                         arg = &it;
                         break;
@@ -156,87 +164,104 @@ private:
     static constexpr int LONGOPT_OFFSET = 1000;
 };
 
+} // anonymous namespace
+
 /**
  * Application entry point.
  */
 int main(int argc, char* argv[])
 {
     std::setlocale(LC_ALL, "");
+    if (MB_CUR_MAX <= 1) {
+        std::setlocale(LC_ALL, "C.UTF-8");
+    }
+
     std::srand(getpid());
 
+    StartupParams& params = *Application::self().sparams;
+
     Args args;
+    args.add('v', "viewer", nullptr, "start in viewer mode",
+             [&params](const char*) {
+                 params.mode.lock(AppMode::Viewer);
+             });
 
-    args.add('v', "viewer", nullptr, "start in viewer mode", [](const char*) {
-        Application::self().sparams.mode = Application::Mode::Viewer;
-    });
+    args.add('g', "gallery", nullptr, "start in gallery mode",
+             [&params](const char*) {
+                 params.mode.lock(AppMode::Gallery);
+             });
 
-    args.add('g', "gallery", nullptr, "start in gallery mode", [](const char*) {
-        Application::self().sparams.mode = Application::Mode::Gallery;
-    });
-
-    args.add(
-        's', "slideshow", nullptr, "start in slideshow mode", [](const char*) {
-            Application::self().sparams.mode = Application::Mode::Slideshow;
-        });
+    args.add('s', "slideshow", nullptr, "start in slideshow mode",
+             [&params](const char*) {
+                 params.mode.lock(AppMode::Slideshow);
+             });
 
     args.add('f', "from-file", "FILE", "load file list from file",
-             [](const char* arg) {
-                 try {
-                     Application::self().sparams.from_file =
-                         std::filesystem::absolute(arg);
-                 } catch (const std::exception&) {
-                     Log::error("Invalid file path \"{}\"", arg);
+             [&params](const char* arg) {
+                 std::ifstream file(arg);
+                 if (!file.is_open()) {
+                     Log::error("Unable to open file {}", arg);
+                     exit(EXIT_FAILURE);
+                 }
+                 std::string line;
+                 while (std::getline(file, line)) {
+                     if (!line.empty()) {
+                         params.sources.emplace_back(line);
+                     }
+                 }
+                 file.close();
+                 if (params.sources.empty()) {
+                     Log::error("File {} is empty", arg);
                      exit(EXIT_FAILURE);
                  }
              });
 
 #ifdef HAVE_COMPOSITOR
     args.add('P', "position", "X,Y", "(Sway/Hyprland only) set window position",
-             [](const char* arg) {
+             [&params](const char* arg) {
                  auto [x, y] = Args::parse_numpair(arg);
                  if (x == std::numeric_limits<ssize_t>::min() ||
                      y == std::numeric_limits<ssize_t>::min()) {
                      Log::error("Invalid window position: {}", arg);
                      exit(EXIT_FAILURE);
                  }
-                 Application::self().sparams.window.x = x;
-                 Application::self().sparams.window.y = y;
+                 params.wnd_pos.lock(Point(x, y));
              });
 #endif
 
     args.add('S', "size", "W,H", "set preferable window size",
-             [](const char* arg) {
+             [&params](const char* arg) {
                  auto [w, h] = Args::parse_numpair(arg);
                  if (w <= 0 || h <= 0) {
                      Log::error("Invalid window size: {}", arg);
                      exit(EXIT_FAILURE);
                  }
-                 Application::self().sparams.window.width = w;
-                 Application::self().sparams.window.height = h;
+                 params.wnd_size.lock(Size(w, h));
              });
 
     args.add('F', "fullscreen", nullptr, "open in full screen mode",
-             [](const char*) {
-                 Application::self().sparams.fullscreen = true;
+             [&params](const char*) {
+                 params.fullscreen.lock(true);
              });
 
     args.add('c', "config", "FILE", "load config from FILE",
-             [](const char* arg) {
-                 Application::self().sparams.config = arg;
+             [&params](const char* arg) {
+                 params.config = arg;
              });
 
     args.add('e', "execute", "LUA", "execute Lua script on start",
-             [](const char* arg) {
-                 Application::self().sparams.lua_script = arg;
+             [&params](const char* arg) {
+                 params.lua_exec = arg;
              });
 
-    args.add(0, "appid", "ID", "set application id", [](const char* arg) {
-        if (!*arg) {
-            Log::error("Empty application id");
-            exit(EXIT_FAILURE);
-        }
-        Application::self().sparams.app_id = arg;
-    });
+    args.add('a', "appid", "ID", "set application id",
+             [&params](const char* arg) {
+                 if (!*arg) {
+                     Log::error("Empty application id");
+                     exit(EXIT_FAILURE);
+                 }
+                 params.app_id.lock(arg);
+             });
 
     args.add(0, "verbose", nullptr, "enable verbose output", [](const char*) {
         Log::verbose_enable() = true;
@@ -270,7 +295,10 @@ int main(int argc, char* argv[])
     }
 
     for (int i = argn; i < argc; ++i) {
-        Application::self().sparams.sources.emplace_back(argv[i]);
+        params.sources.emplace_back(argv[i]);
+    }
+    if (params.sources.empty()) {
+        params.sources.emplace_back("."); // all from the current dir by default
     }
 
     return Application::self().run();

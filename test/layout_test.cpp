@@ -6,24 +6,17 @@
 
 #include <gtest/gtest.h>
 
+// NOLINTBEGIN(readability-function-cognitive-complexity)
+
+namespace {
+
 class LayoutTest : public ::testing::Test {
 protected:
-    void SetUp() override
-    {
-        ImageList& il = ImageList::self();
-        ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
-        while (entry) {
-            entry = il.remove(entry);
-        }
-    }
+    void SetUp() override { ImageList::self().clear(); }
 
     void TearDown() override
     {
-        ImageList& il = ImageList::self();
-        ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
-        while (entry) {
-            entry = il.remove(entry);
-        }
+        ImageList::self().clear();
         if (HasFailure()) {
             puts("Test failed. Layout scheme:");
             PrintLayout();
@@ -34,9 +27,9 @@ protected:
     {
         ImageList& il = ImageList::self();
         for (size_t i = 0; i < total; ++i) {
-            il.add(std::string(ImageEntry::SRC_EXEC) + std::to_string(i));
+            il.add({ ImageEntry::SRC_EXEC + std::to_string(i) });
         }
-        layout.set_window_size({ 80, 60 });
+        layout.set_window_size({ .width = 80, .height = 60 });
         layout.set_thumb_size(10);
         layout.set_padding(5);
     }
@@ -57,7 +50,7 @@ protected:
 
     [[nodiscard]] std::tuple<size_t, size_t> GetSelection() const
     {
-        for (auto& it : layout.get_scheme()) {
+        for (const auto& it : layout.get_scheme()) {
             if (it.img == layout.get_selected()) {
                 return std::make_tuple(it.col, it.row);
             }
@@ -70,7 +63,7 @@ protected:
     {
         printf("  | ");
         for (size_t col = 0; col < layout.get_columns(); ++col) {
-            printf("%2ld ", col);
+            printf("%2zu ", col);
         }
         printf("\n--+");
         for (size_t col = 0; col < layout.get_columns(); ++col) {
@@ -79,9 +72,9 @@ protected:
         printf("\n");
 
         size_t index = 0;
-        for (auto& it : layout.get_scheme()) {
+        for (const auto& it : layout.get_scheme()) {
             if ((index % layout.get_columns()) == 0) {
-                printf("%ld | ", index / layout.get_columns());
+                printf("%zu | ", index / layout.get_columns());
             }
             const std::string path =
                 it.img->path.string().substr(strlen(ImageEntry::SRC_EXEC));
@@ -103,6 +96,8 @@ protected:
     Layout layout;
 };
 
+} // anonymous namespace
+
 TEST_F(LayoutTest, BaseScheme)
 {
     InitLayout(15);
@@ -113,12 +108,12 @@ TEST_F(LayoutTest, BaseScheme)
 
     const ImageEntryPtr selection = layout.get_selected();
     ASSERT_TRUE(selection);
-    ASSERT_TRUE(*selection);
+    ASSERT_TRUE(!selection->removed);
     ASSERT_EQ(selection->path, std::string(ImageEntry::SRC_EXEC) + "0");
 
     ASSERT_EQ(layout.get_scheme().size(), 15UL);
-    for (auto& it : layout.get_scheme()) {
-        ASSERT_TRUE(it.img && *it.img);
+    for (const auto& it : layout.get_scheme()) {
+        ASSERT_TRUE(it.img && !it.img->removed);
         if (it.img == selection) {
             ASSERT_EQ(it.col, 0UL);
             ASSERT_EQ(it.row, 0UL);
@@ -319,3 +314,5 @@ TEST_F(LayoutTest, SelectPageDown)
 
     ASSERT_FALSE(layout.select(Layout::PgDown));
 }
+
+// NOLINTEND(readability-function-cognitive-complexity)

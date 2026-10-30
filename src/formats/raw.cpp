@@ -2,6 +2,7 @@
 // Raw camera image format.
 // Copyright (C) 2025 Artem Senichev <artemsen@gmail.com>
 
+#include "../formatfactory.hpp"
 #include "../imageformat.hpp"
 
 #pragma GCC diagnostic push
@@ -12,25 +13,16 @@
 #include <cstring>
 #include <memory>
 
+namespace {
+
 class ImageFormatRaw : public ImageFormat {
 public:
-    ImageFormatRaw()
+    ImageFormatRaw() noexcept
         : ImageFormat(Priority::Normal, "raw")
     {
     }
 
-    bool
-    set_params(const std::unordered_map<std::string, bool>& params) override
-    {
-        for (const auto& [name, value] : params) {
-            if (name == "camera_wb") {
-                camera_wb = value;
-            }
-        }
-        return true;
-    }
-
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         // open decoder
         LibRaw decoder(0);
@@ -55,7 +47,7 @@ public:
             return nullptr;
         }
         RawImage img(decoder.dcraw_make_mem_image(), &libraw_dcraw_clear_mem);
-        if (img->type != LIBRAW_IMAGE_BITMAP || img->colors != 3 ||
+        if (!img || img->type != LIBRAW_IMAGE_BITMAP || img->colors != 3 ||
             img->bits != 8) {
             return nullptr;
         }
@@ -83,11 +75,11 @@ public:
         return image;
     }
 
-    Pixmap preview(const Data& data, const size_t sz,
-                   const bool max_sz) override
+    [[nodiscard]] Pixmap preview(const Data& data, const size_t sz,
+                                 const bool fill) const override
     {
         if (!FormatFactory::self().embedded_thumb) {
-            return ImageFormat::preview(data, sz, max_sz);
+            return ImageFormat::preview(data, sz, fill);
         }
 
         LibRaw decoder(0);
@@ -99,13 +91,13 @@ public:
         // read thumbnail
         if (decoder.open_buffer(data.data, data.size) != LIBRAW_SUCCESS ||
             decoder.unpack_thumb() != LIBRAW_SUCCESS) {
-            return ImageFormat::preview(data, sz, max_sz);
+            return ImageFormat::preview(data, sz, fill);
         }
 
         RawImage raw_thumb(decoder.dcraw_make_mem_thumb(),
                            &libraw_dcraw_clear_mem);
         if (!raw_thumb) {
-            return ImageFormat::preview(data, sz, max_sz);
+            return ImageFormat::preview(data, sz, fill);
         }
 
         const Data thumb_data {
@@ -115,7 +107,7 @@ public:
 
         const ImagePtr image = FormatFactory::self().decode(thumb_data);
         if (image) {
-            return make_thumb(image->frames[0].pm, sz, max_sz);
+            return make_thumb(image->frames[0].pm, sz, fill);
         }
 
         Pixmap pm;
@@ -127,13 +119,19 @@ public:
                 tdata += 3;
             }
         }
-        Pixmap thumb = make_thumb(pm, sz, max_sz);
+        Pixmap thumb = make_thumb(pm, sz, fill);
         if (FormatFactory::self().fix_orientation) {
             ImageFormat::fix_orientation(
                 thumb, decoder.imgdata.thumbs_list.thumblist[0].tflip);
         }
 
         return thumb;
+    }
+
+    void set_config(Config& params) override
+    {
+        ImageFormat::set_config(params);
+        params.get("camera_wb", camera_wb);
     }
 
     // ignore, done by decoder
@@ -148,4 +146,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatRaw format_raw;
+ImageFormatRaw format_raw;
+
+} // anonymous namespace

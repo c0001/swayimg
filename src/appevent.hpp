@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Applicataion event.
+// Application event.
 // Copyright (C) 2026 Artem Senichev <artemsen@gmail.com>
 
 #pragma once
@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <variant>
+#include <vector>
 
 /** Application event. */
 namespace AppEvent {
@@ -35,6 +36,13 @@ struct KeyPress {
     InputKeyboard key; ///< Key description
 };
 
+/** Mouse/touchpad scroll event. */
+struct Scroll {
+    keymod_t kmods; ///< Keyboard modifiers
+    double delta_h; ///< Horizontal scrolling delta
+    double delta_v; ///< Vertival scrolling delta
+};
+
 /** Mouse clock event. */
 struct MouseClick {
     InputMouse mouse; ///< Mouse key state
@@ -58,6 +66,11 @@ struct Signal {
     InputSignal signal; ///< Signal description
 };
 
+/** File drop event (drag-and-drop receive). */
+struct DragAndDrop {
+    std::vector<std::filesystem::path> paths; ///< Paths to the files
+};
+
 /** File create event. */
 struct FileCreate {
     std::filesystem::path path; ///< Path to the file
@@ -79,10 +92,12 @@ using Holder = std::variant<WindowClose,
                             WindowResize,
                             WindowRescale,
                             KeyPress,
+                            Scroll,
                             MouseClick,
                             MouseMove,
                             GesturePinch,
                             Signal,
+                            DragAndDrop,
                             FileCreate,
                             FileModify,
                             FileRemove>;

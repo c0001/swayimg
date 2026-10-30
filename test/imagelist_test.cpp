@@ -4,104 +4,275 @@
 #include "imagelist.hpp"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <format>
+#include <fstream>
+#include <thread>
 
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization)
+static const std::filesystem::path IMGLIST_TEST_DIR =
+    std::filesystem::path(TEST_DATA_DIR) / "imagelist";
+
+namespace {
+
+// Check real and expected lists for equality
 ::testing::AssertionResult
-CheckImageList(ImageList& il, const std::vector<std::filesystem::path>& expect)
+CheckImageLists(const std::vector<ImageEntryPtr>& real,
+                const std::vector<std::filesystem::path>& expect)
 {
-    ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
-    for (auto& it : expect) {
-        if (!entry) {
-            return ::testing::AssertionFailure()
-                << "Image list too short: expected next " << it;
-        }
-        if (entry->path != it) {
-            return ::testing::AssertionFailure()
-                << std::format("Invalid entry: got {}, expected {}",
-                               entry->path.string(), it.string());
-        }
-        entry = il.get(entry, ImageList::Dir::Next);
+    if (real.size() != expect.size()) {
+        return ::testing::AssertionFailure() << "Size of lists doesn't match";
     }
-    if (entry) {
-        return ::testing::AssertionFailure()
-            << "Image list too big: unexpected " << entry->path.string();
+
+    for (size_t i = 0; i < real.size(); ++i) {
+        if (real[i]->path != expect[i]) {
+            return ::testing::AssertionFailure()
+                << "Path " << i << " doesn't match: expected " << expect[i]
+                << ", but got " << real[i]->path;
+        }
     }
 
     return ::testing::AssertionSuccess();
 }
 
-#define EXPECT_ILEQ(il, ex) \
-    EXPECT_TRUE(CheckImageList(il, ex)) << "ImageList:\n" << to_string(il)
-
-static std::string to_string(ImageList& il)
+// Print real and expected lists
+std::string to_string(const std::vector<ImageEntryPtr>& real,
+                      const std::vector<std::filesystem::path>& expect)
 {
-    std::string res;
-    ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
-    while (entry) {
-        res += " " + entry->path.string();
-        entry = il.get(entry, ImageList::Dir::Next);
-        res += '\n';
+    std::string dump = "# | real         | expected\n";
+    dump += "--+--------------+--------------";
+    for (size_t i = 0; i < std::max(real.size(), expect.size()); ++i) {
+        const std::string rpath =
+            i < real.size() ? real[i]->path.string() : "NULL";
+        const std::string epath =
+            i < expect.size() ? expect[i].string() : "NULL";
+        dump += std::format("\n{} | {:12} | {}", i, rpath, epath);
     }
-    return res;
+    return dump;
 }
 
-TEST(ImageListTest, LoadFile)
+} // anonymous namespace
+
+#define EXPECT_ILEQ(il, expect) \
+    EXPECT_TRUE(CheckImageLists(il, expect)) << to_string(il, expect)
+
+TEST(ImageListTest, Size)
 {
     ImageList il;
 
-    ImageEntryPtr entry = il.load(TEST_DATA_DIR "/filelist.txt");
-    ASSERT_TRUE(entry);
+    ASSERT_EQ(il.size(), 0UL);
+    il.add({ "exec://1" });
+    ASSERT_EQ(il.size(), 1UL);
+    il.add({ "exec://2", "exec://3" });
     ASSERT_EQ(il.size(), 3UL);
-
-    entry = il.get(nullptr, ImageList::Dir::First);
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, "exec://1");
-
-    entry = il.get(entry, ImageList::Dir::Next);
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, "exec://2 ");
-
-    entry = il.get(entry, ImageList::Dir::Next);
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, "exec://3\t");
 }
 
-TEST(ImageListTest, AddDir)
+TEST(ImageListTest, GetOrder)
 {
     ImageList il;
-    il.add(TEST_DATA_DIR);
-    ASSERT_NE(il.size(), 0UL);
+    EXPECT_EQ(il.get_order(), ImageList::Order::Numeric);
+    il.set_order(ImageList::Order::Alpha);
+    EXPECT_EQ(il.get_order(), ImageList::Order::Alpha);
 }
 
-TEST(ImageListTest, Duplicates)
+TEST(ImageListTest, GetReverse)
 {
     ImageList il;
-    ASSERT_TRUE(il.load({
-        "exec://1",
-        "exec://1",
-        "exec://2",
-        "exec://2",
-    }));
-
-    ASSERT_EQ(il.size(), 2UL);
-
-    ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
-    ASSERT_TRUE(entry);
-    EXPECT_EQ(entry->path, "exec://1");
-
-    entry = il.get(entry, ImageList::Dir::Next);
-    ASSERT_TRUE(entry);
-    EXPECT_EQ(entry->path, "exec://2");
+    EXPECT_FALSE(il.get_reverse());
+    il.set_reverse(true);
+    EXPECT_TRUE(il.get_reverse());
 }
 
-TEST(ImageListTest, OutOfRange)
+TEST(ImageListTest, AddNone)
+{
+    ImageList il;
+    EXPECT_TRUE(il.add(std::vector<std::filesystem::path>()).empty());
+    EXPECT_ILEQ(il.get_all(), {});
+}
+
+TEST(ImageListTest, AddOne)
+{
+    ImageList il;
+    const auto added = il.add({ "exec://1" });
+    const std::vector<std::filesystem::path> expected = { "exec://1" };
+    EXPECT_ILEQ(added, expected);
+    EXPECT_ILEQ(il.get_all(), expected);
+}
+
+TEST(ImageListTest, AddDuplicates)
+{
+    ImageList il;
+
+    const auto added0 = il.add({ "exec://1", "exec://2", "exec://2" });
+    const std::vector<std::filesystem::path> expected0 = {
+        "exec://1",
+        "exec://2",
+    };
+    EXPECT_ILEQ(added0, expected0);
+    EXPECT_ILEQ(il.get_all(), expected0);
+
+    const auto added1 = il.add({ "exec://1", "exec://3" });
+    const std::vector<std::filesystem::path> expected1 = { "exec://3" };
+    EXPECT_ILEQ(added1, expected1);
+
+    const std::vector<std::filesystem::path> final = {
+        "exec://1",
+        "exec://2",
+        "exec://3",
+    };
+    EXPECT_ILEQ(il.get_all(), final);
+}
+
+TEST(ImageListTest, AddUnexistent)
+{
+    ImageList il;
+    EXPECT_TRUE(il.add({ "/not/exists" }).empty());
+    EXPECT_ILEQ(il.get_all(), {});
+}
+
+TEST(ImageListTest, AddDirWithBrokenEntries)
+{
+    // temporary directory with regular files and symlink loops (is_directory
+    // fails with ELOOP for them)
+    const std::filesystem::path dir = std::filesystem::temp_directory_path() /
+        std::format("swayimg_test_{}", getpid());
+    std::filesystem::remove_all(dir);
+    std::filesystem::create_directories(dir);
+    constexpr size_t num_files = 20;
+    for (size_t i = 0; i < num_files; ++i) {
+        std::ofstream(dir / std::format("file_{}", i)).put('x');
+        // the order of directory entries is unspecified, so create enough
+        // loops to get some of them before the files
+        std::filesystem::create_symlink(std::format("loop_{}", i),
+                                        dir / std::format("loop_{}", i));
+    }
+
+    ImageList il;
+    il.adjacent = false;
+    il.add({ dir });
+    EXPECT_EQ(il.size(), num_files);
+
+    // the same for a path that was reported by file system monitor
+    EXPECT_NO_THROW(il.remove({ dir / "loop_0" }));
+    EXPECT_EQ(il.size(), num_files);
+
+    std::filesystem::remove_all(dir);
+}
+
+TEST(ImageListTest, AddVanishingFile)
+{
+    // a file that is created and removed all the time (a temporary file of
+    // a browser) must not make ImageList::add() throw
+    const std::filesystem::path file = std::filesystem::temp_directory_path() /
+        std::format("swayimg_test_{}", getpid());
+    std::atomic<bool> stop = false;
+    std::thread churn([&file, &stop] {
+        while (!stop) {
+            std::ofstream(file).put('x');
+            std::error_code ec;
+            std::filesystem::remove(file, ec);
+        }
+    });
+
+    bool thrown = false;
+    const auto end =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    while (!thrown && std::chrono::steady_clock::now() < end) {
+        ImageList il;
+        il.adjacent = false;
+        try {
+            il.add({ file });
+        } catch (const std::filesystem::filesystem_error&) {
+            thrown = true;
+        }
+    }
+
+    stop = true;
+    churn.join();
+    std::error_code ec;
+    std::filesystem::remove(file, ec);
+
+    EXPECT_FALSE(thrown);
+}
+
+TEST(ImageListTest, AdjacentOff)
+{
+    ImageList il;
+    il.adjacent = false;
+    il.recursive = false;
+    il.add({ IMGLIST_TEST_DIR / "file_0" });
+    EXPECT_TRUE(il.find(IMGLIST_TEST_DIR / "file_0"));
+    EXPECT_ILEQ(il.get_all(), { IMGLIST_TEST_DIR / "file_0" });
+}
+
+TEST(ImageListTest, AdjacentOn)
+{
+    ImageList il;
+    il.adjacent = true;
+    il.recursive = false;
+    const auto added = il.add({ IMGLIST_TEST_DIR / "file_1" });
+
+    const std::vector<std::filesystem::path> expected_a = {
+        IMGLIST_TEST_DIR / "file_1",
+        IMGLIST_TEST_DIR / "file_0",
+    };
+    EXPECT_ILEQ(added, expected_a);
+
+    const std::vector<std::filesystem::path> expected_f = {
+        IMGLIST_TEST_DIR / "file_0",
+        IMGLIST_TEST_DIR / "file_1",
+    };
+    EXPECT_ILEQ(il.get_all(), expected_f);
+}
+
+TEST(ImageListTest, RecursiveOff)
+{
+    ImageList il;
+    il.adjacent = false;
+    il.recursive = false;
+    il.add({ IMGLIST_TEST_DIR });
+
+    const std::vector<std::filesystem::path> expected = {
+        IMGLIST_TEST_DIR / "file_0",
+        IMGLIST_TEST_DIR / "file_1",
+    };
+    EXPECT_ILEQ(il.get_all(), expected);
+}
+
+TEST(ImageListTest, RecursiveOn)
+{
+    ImageList il;
+    il.adjacent = false;
+    il.recursive = true;
+    il.add({ IMGLIST_TEST_DIR });
+
+    const std::vector<std::filesystem::path> expected = {
+        IMGLIST_TEST_DIR / "file_0",
+        IMGLIST_TEST_DIR / "file_1",
+        IMGLIST_TEST_DIR / "subdir" / "file_sub0",
+        IMGLIST_TEST_DIR / "subdir" / "file_sub1",
+    };
+    EXPECT_ILEQ(il.get_all(), expected);
+}
+
+TEST(ImageListTest, SourceOrder)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::Numeric);
+    const std::vector<std::filesystem::path> paths = {
+        "exec://3",
+        "exec://1",
+        "exec://2",
+    };
+    const auto added = il.add(paths);
+    EXPECT_ILEQ(added, paths);
+}
+
+TEST(ImageListTest, BigNumber)
 {
     ImageList il;
     il.set_order(ImageList::Order::Numeric);
@@ -111,11 +282,11 @@ TEST(ImageListTest, OutOfRange)
         "exec://7152b8159cf6a64e8dda2ff3f8ed40f.jpeg",
     };
 
-    const ImageEntryPtr entry = il.load(paths);
-    ASSERT_TRUE(entry);
+    il.add(paths);
+    EXPECT_ILEQ(il.get_all(), paths);
 }
 
-TEST(ImageListTest, Unordered)
+TEST(ImageListTest, SortNone)
 {
     ImageList il;
     il.set_order(ImageList::Order::None);
@@ -125,13 +296,8 @@ TEST(ImageListTest, Unordered)
         "exec://3",
         "exec://1",
     };
-
-    const ImageEntryPtr entry = il.load(paths);
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, "exec://2");
-    EXPECT_ILEQ(il, paths);
+    il.add(paths);
+    EXPECT_ILEQ(il.get_all(), paths);
 }
 
 TEST(ImageListTest, SortAlpha)
@@ -148,7 +314,7 @@ TEST(ImageListTest, SortAlpha)
         /* 4 */ "exec://a/b/c/0",
         /* 5 */ "exec://ab/0",
     };
-    const ImageEntryPtr entry = il.load({
+    il.add({
         paths[2],
         paths[0],
         paths[5],
@@ -156,45 +322,8 @@ TEST(ImageListTest, SortAlpha)
         paths[4],
         paths[1],
     });
-
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, paths[2]);
-    EXPECT_ILEQ(il, paths);
+    EXPECT_ILEQ(il.get_all(), paths);
 }
-
-#ifdef __linux__
-TEST(ImageListTest, SortAlphaUnicode)
-{
-    ImageList il;
-    il.set_order(ImageList::Order::Alpha);
-    il.set_reverse(false);
-
-    const std::vector<std::filesystem::path> paths = {
-        /* 0 */ "exec://a",
-        /* 1 */ "exec://b",
-        /* 2 */ "exec://е",
-        /* 3 */ "exec://ё",
-        /* 4 */ "exec://ж",
-        /* 5 */ "exec://я",
-    };
-    const ImageEntryPtr entry = il.load({
-        paths[2],
-        paths[0],
-        paths[5],
-        paths[3],
-        paths[4],
-        paths[1],
-    });
-
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, paths[2]);
-    EXPECT_ILEQ(il, paths);
-}
-#endif // __linux__
 
 TEST(ImageListTest, SortAlphaReverse)
 {
@@ -210,7 +339,7 @@ TEST(ImageListTest, SortAlphaReverse)
         /* 4 */ "exec://a/1",
         /* 5 */ "exec://a/0",
     };
-    const ImageEntryPtr entry = il.load({
+    il.add({
         paths[2],
         paths[0],
         paths[5],
@@ -218,13 +347,35 @@ TEST(ImageListTest, SortAlphaReverse)
         paths[4],
         paths[1],
     });
-
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, paths[2]);
-    EXPECT_ILEQ(il, paths);
+    EXPECT_ILEQ(il.get_all(), paths);
 }
+
+#if defined(__linux__) && defined(__GLIBC__)
+TEST(ImageListTest, SortAlphaUnicode)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::Alpha);
+    il.set_reverse(false);
+
+    const std::vector<std::filesystem::path> paths = {
+        /* 0 */ "exec://a",
+        /* 1 */ "exec://b",
+        /* 2 */ "exec://е",
+        /* 3 */ "exec://ё",
+        /* 4 */ "exec://ж",
+        /* 5 */ "exec://я",
+    };
+    il.add({
+        paths[2],
+        paths[0],
+        paths[5],
+        paths[3],
+        paths[4],
+        paths[1],
+    });
+    EXPECT_ILEQ(il.get_all(), paths);
+}
+#endif // __linux__ && __GLIBC__
 
 TEST(ImageListTest, SortNumeric)
 {
@@ -240,8 +391,7 @@ TEST(ImageListTest, SortNumeric)
         /* 4 */ "exec://a/10b2/a",
         /* 5 */ "exec://a/10b10/a",
     };
-
-    const ImageEntryPtr entry = il.load({
+    il.add({
         paths[2],
         paths[0],
         paths[5],
@@ -249,12 +399,7 @@ TEST(ImageListTest, SortNumeric)
         paths[4],
         paths[1],
     });
-
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, paths[2]);
-    EXPECT_ILEQ(il, paths);
+    EXPECT_ILEQ(il.get_all(), paths);
 }
 
 TEST(ImageListTest, SortNumericReverse)
@@ -271,8 +416,7 @@ TEST(ImageListTest, SortNumericReverse)
         /* 4 */ "exec://a/10",
         /* 5 */ "exec://a/2",
     };
-
-    const ImageEntryPtr entry = il.load({
+    il.add({
         paths[2],
         paths[0],
         paths[5],
@@ -280,12 +424,62 @@ TEST(ImageListTest, SortNumericReverse)
         paths[4],
         paths[1],
     });
+    EXPECT_ILEQ(il.get_all(), paths);
+}
 
-    ASSERT_TRUE(entry);
-    EXPECT_TRUE(*entry);
-    EXPECT_NE(entry->index, 0UL);
-    EXPECT_EQ(entry->path, paths[2]);
-    EXPECT_ILEQ(il, paths);
+TEST(ImageListTest, SortTime)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.set_reverse(false);
+
+    const std::vector<std::filesystem::path> paths = {
+        "exec://0", "exec://1", "exec://2", "exec://3", "exec://4",
+    };
+    il.add(paths);
+    EXPECT_ILEQ(il.get_all(), paths);
+
+    std::time_t mtime = 1000;
+    for (const auto& it : il.get_all()) {
+        if (it->path != "exec://2") {
+            it->mtime = mtime;
+        }
+        --mtime;
+    }
+
+    il.set_order(ImageList::Order::Mtime);
+    const std::vector<std::filesystem::path> expect = {
+        "exec://2", "exec://4", "exec://3", "exec://1", "exec://0",
+    };
+    EXPECT_ILEQ(il.get_all(), expect);
+}
+
+TEST(ImageListTest, SortSize)
+{
+    ImageList il;
+
+    const auto added = il.add(
+        { "exec://sortsize_a", "exec://sortsize_b", "exec://sortsize_c" });
+    EXPECT_EQ(added.size(), 3UL);
+
+    // set sizes after add to trigger re-sort
+    for (const auto& it : il.get_all()) {
+        if (it->path == "exec://sortsize_a") {
+            it->size = 300;
+        } else if (it->path == "exec://sortsize_b") {
+            it->size = 100;
+        } else if (it->path == "exec://sortsize_c") {
+            it->size = 200;
+        }
+    }
+    il.set_order(ImageList::Order::Size);
+
+    const std::vector<std::filesystem::path> expected = {
+        "exec://sortsize_b",
+        "exec://sortsize_c",
+        "exec://sortsize_a",
+    };
+    EXPECT_ILEQ(il.get_all(), expected);
 }
 
 TEST(ImageListTest, SortRandom)
@@ -293,26 +487,15 @@ TEST(ImageListTest, SortRandom)
     ImageList il;
     il.set_order(ImageList::Order::Random);
 
-    // clang-format off
-    const char* paths[8] = {
-        "exec://0",
-        "exec://1",
-        "exec://2",
-        "exec://3",
-        "exec://4",
-        "exec://5",
-        "exec://6",
-        "exec://7",
+    const std::vector<std::filesystem::path> paths = {
+        "exec://0", "exec://1", "exec://2", "exec://3",
+        "exec://4", "exec://5", "exec://6", "exec://7",
     };
-    // clang-format on
-
-    for (auto& it : paths) {
-        il.add(it);
-    }
+    il.add(paths);
 
     ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
     bool ordered = true;
-    for (auto& it : paths) {
+    for (const auto& it : paths) {
         ASSERT_TRUE(entry);
         ordered &= entry->path == it;
         entry = il.get(entry, ImageList::Dir::Next);
@@ -321,65 +504,82 @@ TEST(ImageListTest, SortRandom)
     EXPECT_FALSE(ordered);
 }
 
-TEST(ImageListTest, GetFirstLast)
+TEST(ImageListTest, GetFirst)
 {
     ImageList il;
+    il.set_order(ImageList::Order::None);
 
-    ASSERT_EQ(il.size(), 0UL);
-    ASSERT_FALSE(il.get(nullptr, ImageList::Dir::First));
-    ASSERT_FALSE(il.get(nullptr, ImageList::Dir::Last));
+    EXPECT_FALSE(il.get(nullptr, ImageList::Dir::First));
 
-    il.add("exec://first");
-    il.add("exec://last");
+    il.add({ "exec://first", "exec://middle", "exec://last" });
 
-    ASSERT_EQ(il.size(), 2UL);
-
-    ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
-    ASSERT_TRUE(entry);
-    EXPECT_EQ(entry->path, "exec://first");
-
-    entry = il.get(nullptr, ImageList::Dir::Last);
-    ASSERT_TRUE(entry);
-    EXPECT_EQ(entry->path, "exec://last");
+    const ImageEntryPtr first = il.get(nullptr, ImageList::Dir::First);
+    ASSERT_TRUE(first);
+    EXPECT_EQ(first->path, "exec://first");
 }
 
-TEST(ImageListTest, GetNextPrev)
+TEST(ImageListTest, GetLast)
 {
     ImageList il;
+    il.set_order(ImageList::Order::None);
 
-    il.add("exec://first");
-    il.add("exec://last");
+    EXPECT_FALSE(il.get(nullptr, ImageList::Dir::Last));
 
-    ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
-    ASSERT_TRUE(entry);
-    EXPECT_EQ(entry->path, "exec://first");
-    ASSERT_FALSE(il.get(entry, ImageList::Dir::Prev));
+    il.add({ "exec://first", "exec://middle", "exec://last" });
 
-    entry = il.get(entry, ImageList::Dir::Next);
-    ASSERT_TRUE(entry);
-    EXPECT_EQ(entry->path, "exec://last");
-    ASSERT_FALSE(il.get(entry, ImageList::Dir::Next));
-
-    entry = il.get(entry, ImageList::Dir::Prev);
-    ASSERT_TRUE(entry);
-    EXPECT_EQ(entry->path, "exec://first");
+    const ImageEntryPtr last = il.get(nullptr, ImageList::Dir::Last);
+    ASSERT_TRUE(last);
+    EXPECT_EQ(last->path, "exec://last");
 }
 
-TEST(ImageListTest, GetNextPrevParent)
+TEST(ImageListTest, GetNext)
 {
     ImageList il;
-    ASSERT_TRUE(il.load({
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://first", "exec://last" });
+
+    const ImageEntryPtr first = il.get(nullptr, ImageList::Dir::First);
+    ASSERT_TRUE(first);
+
+    const ImageEntryPtr next = il.get(first, ImageList::Dir::Next);
+    ASSERT_TRUE(next);
+    EXPECT_EQ(next->path, "exec://last");
+
+    EXPECT_FALSE(il.get(next, ImageList::Dir::Next));
+}
+
+TEST(ImageListTest, GetPrev)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://first", "exec://last" });
+
+    const ImageEntryPtr last = il.get(nullptr, ImageList::Dir::Last);
+    ASSERT_TRUE(last);
+
+    const ImageEntryPtr prev = il.get(last, ImageList::Dir::Prev);
+    ASSERT_TRUE(prev);
+    EXPECT_EQ(prev->path, "exec://first");
+
+    EXPECT_FALSE(il.get(prev, ImageList::Dir::Prev));
+}
+
+TEST(ImageListTest, GetNextParent)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.add({
         "exec://a/0",
         "exec://a/1",
         "exec://b/0",
         "exec://c/0",
         "exec://c/1",
-    }));
+    });
 
-    ImageEntryPtr entry;
+    ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::First);
+    ASSERT_TRUE(entry);
 
-    entry = il.get(il.get(nullptr, ImageList::Dir::First),
-                   ImageList::Dir::NextParent);
+    entry = il.get(entry, ImageList::Dir::NextParent);
     ASSERT_TRUE(entry);
     EXPECT_EQ(entry->path, "exec://b/0");
 
@@ -389,25 +589,40 @@ TEST(ImageListTest, GetNextPrevParent)
 
     entry = il.get(entry, ImageList::Dir::NextParent);
     ASSERT_FALSE(entry);
+}
 
-    entry = il.get(il.get(nullptr, ImageList::Dir::Last),
-                   ImageList::Dir::PrevParent);
+TEST(ImageListTest, GetPrevParent)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.add({
+        "exec://a/0",
+        "exec://a/1",
+        "exec://b/0",
+        "exec://c/0",
+        "exec://c/1",
+    });
+
+    ImageEntryPtr entry = il.get(nullptr, ImageList::Dir::Last);
+    ASSERT_TRUE(entry);
+
+    entry = il.get(entry, ImageList::Dir::PrevParent);
     ASSERT_TRUE(entry);
     EXPECT_EQ(entry->path, "exec://b/0");
 
     entry = il.get(entry, ImageList::Dir::PrevParent);
     ASSERT_TRUE(entry);
     EXPECT_EQ(entry->path, "exec://a/1");
+
+    entry = il.get(entry, ImageList::Dir::PrevParent);
+    ASSERT_FALSE(entry);
 }
 
 TEST(ImageListTest, GetRandom)
 {
     ImageList il;
-    ASSERT_TRUE(il.load({
-        "exec://1",
-        "exec://2",
-        "exec://3",
-    }));
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://1", "exec://2", "exec://3" });
 
     ImageEntryPtr entry;
 
@@ -425,12 +640,8 @@ TEST(ImageListTest, GetRandom)
 TEST(ImageListTest, Advance)
 {
     ImageList il;
-    ASSERT_TRUE(il.load({
-        "exec://1",
-        "exec://2",
-        "exec://3",
-        "exec://4",
-    }));
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://1", "exec://2", "exec://3", "exec://4" });
 
     EXPECT_FALSE(il.get(il.get(nullptr, ImageList::Dir::First), 100));
     EXPECT_FALSE(il.get(il.get(nullptr, ImageList::Dir::First), -100));
@@ -451,12 +662,8 @@ TEST(ImageListTest, Advance)
 TEST(ImageListTest, Distance)
 {
     ImageList il;
-    ASSERT_TRUE(il.load({
-        "exec://1",
-        "exec://2",
-        "exec://3",
-        "exec://4",
-    }));
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://1", "exec://2", "exec://3", "exec://4" });
 
     EXPECT_EQ(il.distance(il.get(nullptr, ImageList::Dir::First),
                           il.get(nullptr, ImageList::Dir::Last)),
@@ -475,11 +682,8 @@ TEST(ImageListTest, Distance)
 TEST(ImageListTest, Find)
 {
     ImageList il;
-    ASSERT_TRUE(il.load({
-        "exec://1",
-        "exec://2",
-        "exec://3",
-    }));
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://1", "exec://2", "exec://3" });
 
     const ImageEntryPtr entry = il.find("exec://2");
     ASSERT_TRUE(entry);
@@ -489,22 +693,180 @@ TEST(ImageListTest, Find)
     ASSERT_FALSE(il.find(""));
 }
 
-TEST(ImageListTest, Remove)
+TEST(ImageListTest, Clear)
 {
     ImageList il;
-    ASSERT_TRUE(il.load({
+    il.set_order(ImageList::Order::None);
+
+    const std::vector<std::filesystem::path> paths = {
         "exec://1",
         "exec://2",
         "exec://3",
-    }));
+    };
+    il.add(paths);
 
-    ASSERT_EQ(il.size(), 3UL);
+    EXPECT_ILEQ(il.clear(), paths);
+    EXPECT_ILEQ(il.get_all(), {});
+}
+
+TEST(ImageListTest, RemoveOne)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://1", "exec://2", "exec://3" });
 
     const ImageEntryPtr entry = il.find("exec://2");
     ASSERT_TRUE(entry);
-    ASSERT_TRUE(*entry);
+    EXPECT_FALSE(entry->removed);
 
     il.remove(entry);
-    ASSERT_FALSE(*entry);
-    ASSERT_EQ(il.size(), 2UL);
+    EXPECT_TRUE(entry->removed);
+
+    const std::vector<std::filesystem::path> expected = {
+        "exec://1",
+        "exec://3",
+    };
+    EXPECT_ILEQ(il.get_all(), expected);
+}
+
+TEST(ImageListTest, RemoveSameEntryTwice)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.add({ "exec://1", "exec://2", "exec://3" });
+
+    const ImageEntryPtr entry = il.find("exec://2");
+    ASSERT_TRUE(entry);
+
+    il.remove(entry);
+    il.remove(entry); // must not remove any other entry
+
+    const std::vector<std::filesystem::path> expected = {
+        "exec://1",
+        "exec://3",
+    };
+    EXPECT_ILEQ(il.get_all(), expected);
+}
+
+TEST(ImageListTest, RemoveFromEmpty)
+{
+    ImageList il;
+    const auto removed = il.remove({ "exec://none" });
+    EXPECT_TRUE(removed.empty());
+}
+
+TEST(ImageListTest, RemoveMultiple)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.add({
+        "exec://1",
+        "exec://2",
+        "exec://3",
+        "exec://4",
+        "exec://5",
+    });
+
+    EXPECT_TRUE(il.remove(std::vector<std::filesystem::path> {}).empty());
+    EXPECT_TRUE(il.remove({ "not_exists" }).empty());
+
+    const auto removed = il.remove({ "exec://2", "exec://5", "exec://999" });
+    EXPECT_EQ(removed.size(), 2UL);
+    for (const auto& it : removed) {
+        EXPECT_TRUE(it->removed);
+    }
+
+    const std::vector<std::filesystem::path> expected = {
+        "exec://1",
+        "exec://3",
+        "exec://4",
+    };
+    EXPECT_ILEQ(il.get_all(), expected);
+}
+
+TEST(ImageListTest, RemoveByParent)
+{
+    ImageList il;
+    il.adjacent = false;
+    il.recursive = true;
+    il.add({ IMGLIST_TEST_DIR });
+    il.remove({ IMGLIST_TEST_DIR / "subdir" });
+
+    const std::vector<std::filesystem::path> expected = {
+        IMGLIST_TEST_DIR / "file_0",
+        IMGLIST_TEST_DIR / "file_1",
+    };
+    EXPECT_ILEQ(il.get_all(), expected);
+}
+
+TEST(ImageListTest, GetRemoved)
+{
+    ImageList il;
+    il.set_order(ImageList::Order::None);
+    il.add({
+        "exec://0",
+        "exec://1",
+        "exec://2",
+        "exec://3",
+        "exec://4",
+    });
+    ImageEntryPtr removed = il.find("exec://2");
+    ASSERT_TRUE(removed);
+    il.remove(removed);
+
+    ImageEntryPtr entry;
+
+    entry = il.get(removed, ImageList::Dir::Next);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://3");
+
+    entry = il.get(removed, ImageList::Dir::Prev);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://1");
+
+    entry = il.get(removed, ImageList::Dir::NextParent);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://3");
+
+    entry = il.get(removed, ImageList::Dir::PrevParent);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://1");
+
+    entry = il.get(nullptr, ImageList::Dir::First);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://0");
+
+    entry = il.get(nullptr, ImageList::Dir::Last);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://4");
+
+    entry = il.get(removed, ImageList::Dir::Random);
+    ASSERT_TRUE(entry);
+    EXPECT_NE(entry->path, "exec://2");
+
+    // remove first
+    removed = il.find("exec://0");
+    ASSERT_TRUE(removed);
+    il.remove(removed);
+
+    entry = il.get(removed, ImageList::Dir::Next);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://1");
+
+    entry = il.get(removed, ImageList::Dir::Prev);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://1");
+
+    // remove last
+    removed = il.find("exec://4");
+    ASSERT_TRUE(removed);
+    il.remove(removed);
+
+    entry = il.get(removed, ImageList::Dir::Next);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://3");
+
+    entry = il.get(removed, ImageList::Dir::Prev);
+    ASSERT_TRUE(entry);
+    EXPECT_EQ(entry->path, "exec://3");
 }

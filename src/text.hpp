@@ -5,11 +5,9 @@
 #pragma once
 
 #include "fdevent.hpp"
-#include "font.hpp"
 #include "image.hpp"
 
 #include <array>
-#include <list>
 #include <map>
 #include <string>
 #include <vector>
@@ -32,19 +30,20 @@ public:
     static constexpr const char* FIELD_FILE_PATH = "path";
     static constexpr const char* FIELD_FILE_DIR = "dir";
     static constexpr const char* FIELD_FILE_NAME = "name";
-    static constexpr const char* FIELD_FILE_SIZE = "size";
-    static constexpr const char* FIELD_FILE_SIZE_HR = "sizehr";
-    static constexpr const char* FIELD_FILE_TIME = "time";
+    static constexpr const wchar_t* FIELD_FILE_SIZE = L"size";
+    static constexpr const wchar_t* FIELD_FILE_SIZE_HR = L"sizehr";
+    static constexpr const wchar_t* FIELD_FILE_TIME = L"time";
     static constexpr const char* FIELD_IMAGE_FORMAT = "format";
-    static constexpr const char* FIELD_SCALE = "scale";
-    static constexpr const char* FIELD_LIST_INDEX = "list.index";
-    static constexpr const char* FIELD_LIST_TOTAL = "list.total";
-    static constexpr const char* FIELD_FRAME_INDEX = "frame.index";
-    static constexpr const char* FIELD_FRAME_TOTAL = "frame.total";
-    static constexpr const char* FIELD_FRAME_WIDTH = "frame.width";
-    static constexpr const char* FIELD_FRAME_HEIGHT = "frame.height";
+    static constexpr const wchar_t* FIELD_SCALE = L"scale";
+    static constexpr const wchar_t* FIELD_LIST_INDEX = L"list.index";
+    static constexpr const wchar_t* FIELD_LIST_TOTAL = L"list.total";
+    static constexpr const wchar_t* FIELD_FRAME_INDEX = L"frame.index";
+    static constexpr const wchar_t* FIELD_FRAME_TOTAL = L"frame.total";
+    static constexpr const wchar_t* FIELD_FRAME_WIDTH = L"frame.width";
+    static constexpr const wchar_t* FIELD_FRAME_HEIGHT = L"frame.height";
     static constexpr const char* FIELD_META = "meta";
 
+    /** Constructor. */
     Text();
 
     /**
@@ -136,6 +135,11 @@ public:
     void hide();
 
     /**
+     * Reset text overlay (remove all data except status message).
+     */
+    void clear();
+
+    /**
      * Check if text layer currently displayed.
      * @return true if layer is visible
      */
@@ -160,7 +164,14 @@ public:
     void reset(const ImageEntryPtr& entry);
 
     /**
-     * Set filed value.
+     * Set filed value (wide char variant).
+     * @param field field name
+     * @param value field value
+     */
+    void set_field(const std::wstring& field, const std::wstring& value);
+
+    /**
+     * Set filed value (UTF8 variant).
      * @param field field name
      * @param value field value
      */
@@ -178,70 +189,123 @@ public:
     void draw(Pixmap& target) const;
 
 private:
-    /** Rendered text line. */
-    struct Line {
-        Line(std::string&& scheme)
-            : scheme(scheme)
-        {
-        }
+    /** Data fields to substitute. */
+    using Fields = std::map<std::wstring, std::wstring>;
+
+    /** Single text line. */
+    struct TextLine {
+        /**
+         * Get text width in pixels.
+         * @return text width in pixels
+         */
+        [[nodiscard]] size_t width() const;
 
         /**
-         * Update line.
-         * @param font font instance
-         * @param fields fields values
+         * Get text height in pixels.
+         * @return text height in pixels
          */
-        void update(Font& font,
-                    const std::map<std::string, std::string>& fields);
+        [[nodiscard]] size_t height() const;
 
-        std::string scheme;  ///< Line scheme
-        std::string display; ///< Displayed text
-        Pixmap pm;           ///< Mask pixmap with rendered text
+        /**
+         * Get horizontal margin around text line.
+         * @return text height in pixels
+         */
+        [[nodiscard]] size_t margin() const;
+
+        /**
+         * Draw text line.
+         * @param target destination pixmap (window)
+         * @param pos text position on target pixmap
+         * @param color text color
+         * @param shadow shadow color
+         */
+        void draw(Pixmap& target, const Point& pos, const argb_t color,
+                  const argb_t shadow) const;
+
+        std::wstring text; ///< Displayed text
     };
 
-    /** Key/value. */
-    struct KeyVal {
-        Line key;
-        Line value;
+    /** Status message block. */
+    struct StatusBlock {
+        /**
+         * Set status text.
+         * @param msg status message text
+         * @param spacing desired spacing between lines
+         */
+        void set(const std::string& msg);
+
+        /**
+         * Clear status message.
+         */
+        void clear();
+
+        /**
+         * Update block size/spacing parameters.
+         * @param spacing desired spacing between lines
+         */
+        void recalc(const ssize_t spacing);
+
+        std::vector<TextLine> lines; ///< Displayed lines
+        size_t width;                ///< Total width in pixels
+        size_t height;               ///< Total block height in pixels
+        ssize_t line_height;         ///< Line height include spacing
     };
 
-    /** Text block. */
-    using Block = std::vector<KeyVal>;
+    struct KeyValBlock {
+        /** Text line constructed from template. */
+        struct TemplateLine : public TextLine {
+            /**
+             * Update displayed text by applying fields data to template.
+             * @param fields fields values
+             */
+            void update(const Fields& fields);
 
-    /** Block dimension. */
-    struct Dimension {
-        size_t max_key_width; ///< Key width in pixels
-        size_t total_width;   ///< Total block width in pixels
-        size_t total_height;  ///< Total block height in pixels
-        size_t line_height;   ///< Height of single line
-        ssize_t line_spacing; ///< Line spaceing in pixels
+            std::wstring templ; ///< Text line template
+        };
+
+        /**
+         * Set text scheme for the block.
+         * @param scheme scheme description
+         */
+        void set_scheme(const Scheme& scheme);
+
+        /**
+         * Update block text data.
+         * @param fields map of fields
+         */
+        void update(const Fields& fields);
+
+        /**
+         * Update block size/spacing parameters.
+         * @param spacing desired spacing between lines
+         */
+        void recalc(const ssize_t spacing);
+
+        /** Block line with key/value text. */
+        struct BlockLine {
+            TemplateLine key;
+            TemplateLine value;
+        };
+        std::vector<BlockLine> lines; ///< Displayed lines
+
+        size_t key_width;    ///< Max key width in pixels
+        size_t value_width;  ///< Max value width in pixels
+        size_t total_width;  ///< Total block width in pixels
+        size_t total_height; ///< Total block height in pixels
+        ssize_t line_height; ///< Line height include spacing
     };
 
     /**
-     * Get block dimensions.
-     * @param block block to calculate
-     * @return block dimensions
+     * Recalculate text blocks sizes.
      */
-    [[nodiscard]] Dimension get_dimension(const Block& block) const;
+    void recalc();
 
     /**
-     * Reinitialize pixmaps.
-     */
-    void refresh();
-
-    /**
-     * Draw text overlay on the window.
-     * @param pos block position
+     * Draw text block of template lines on the window.
+     * @param blkpos block position
      * @param target destination pixmap (window)
      */
-    void draw(const Position pos, Pixmap& target) const;
-
-    /**
-     * Draw text line.
-     * @param text text line to draw
-     * @param target destination pixmap (window)
-     * @param pos text position on target pixmap
-     */
-    void draw(const Pixmap& text, Pixmap& target, const Point& pos) const;
+    void draw(const Position blkpos, Pixmap& target) const;
 
 private:
     /** Text hide timeout. */
@@ -256,8 +320,6 @@ private:
     HideTimeout overall_tm; ///< Overall show timer
     HideTimeout status_tm;  ///< Status show timer
 
-    Font font; ///< Font instance
-
     ssize_t spacing; ///< Line spacing in pixels
     size_t padding;  ///< Text padding
 
@@ -265,8 +327,8 @@ private:
     argb_t background; ///< Text background color
     argb_t shadow;     ///< Text shadow color
 
-    std::list<Pixmap> status; ///< Status message
+    Fields fields; ///< Data fields
 
-    std::array<Block, 4> blocks; ///< Four text blocks at window corners
-    std::map<std::string, std::string> fields; ///< Data fields
+    StatusBlock status;                ///< Status message block
+    std::array<KeyValBlock, 4> blocks; ///< Four text blocks at window corners
 };

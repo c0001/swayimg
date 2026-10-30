@@ -46,8 +46,9 @@ public:
 
     /**
      * Stop repeat mode.
+     * @param key key to stop repeat or 0 to stop unconditionally
      */
-    void stop_repeat() const;
+    void stop_repeat(const xkb_keycode_t code) const;
 
     /**
      * Get repeat description.
@@ -112,7 +113,7 @@ private:
     FdTimer repeat_timer;
     size_t repeat_rate = 0;
     size_t repeat_delay = 0;
-    xkb_keysym_t repeat_key = XKB_KEY_NoSymbol;
+    xkb_keycode_t repeat_code = 0;
 
     // X keyboard extension handles
     xkb_context* context = nullptr;

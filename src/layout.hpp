@@ -28,6 +28,9 @@ public:
         Point pos;         ///< Window coordinates
     };
 
+    /** Constructor. */
+    Layout();
+
     /**
      * Update layout: recalculate thumbnails scheme.
      */
@@ -49,7 +52,7 @@ public:
      * Get thumbnail size.
      * @return thumbnail size in pixels
      */
-    inline size_t get_thumb_size() const { return thumb_size; }
+    [[nodiscard]] size_t get_thumb_size() const { return thumb_size; }
 
     /**
      * Set padding size.
@@ -61,13 +64,13 @@ public:
      * Get number of columns in layout scheme.
      * @return number of columns
      */
-    [[nodiscard]] inline size_t get_columns() const { return columns; }
+    [[nodiscard]] size_t get_columns() const { return columns; }
 
     /**
      * Get number of rows in layout scheme.
      * @return number of rows
      */
-    [[nodiscard]] inline size_t get_rows() const { return rows; }
+    [[nodiscard]] size_t get_rows() const { return rows; }
 
     /**
      * Set currently selected thumbnail.
@@ -103,14 +106,21 @@ public:
     [[nodiscard]] ImageEntryPtr get_selected() const;
 
     /**
+     * Check if give entry is visible (is in the current scheme).
+     * @param entry entry to check if included in the scheme
+     * @return true if visible (part of the current scheme)
+     */
+    [[nodiscard]] bool is_visible(const ImageEntryPtr& entry) const;
+
+    /**
      * Get layout scheme.
      * @return array with thumbnails layout description
      */
     [[nodiscard]] const std::vector<Thumbnail>& get_scheme() const;
 
 private:
-    size_t thumb_size = 200;       ///< Size of thumbnail in pixels
-    size_t thumb_padding = 5;      ///< Padding between thumbnails in pixels
+    size_t thumb_size;             ///< Size of thumbnail in pixels
+    size_t thumb_padding;          ///< Padding between thumbnails in pixels
     std::vector<Thumbnail> scheme; ///< Layout scheme of visible thumbnails
 
     Size window;          ///< Layout size (output window)

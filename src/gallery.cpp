@@ -5,61 +5,32 @@
 #include "gallery.hpp"
 
 #include "application.hpp"
-#include "imageformat.hpp"
+#include "defaults.hpp"
+#include "formatfactory.hpp"
 #include "imagelist.hpp"
-#include "log.hpp"
 #include "render.hpp"
 #include "resources.hpp"
 #include "text.hpp"
 
 #include <sys/stat.h>
 
-#include <array>
+#include <cstdlib>
+#include <format>
 #include <utility>
 
 // Limits for thumbnail size and other parameters
-constexpr size_t THIMB_SIZE_MIN = 10;
-constexpr size_t THIMB_SIZE_MAX = 10000;
+constexpr size_t THUMB_SIZE_MIN = 10;
+constexpr size_t THUMB_SIZE_MAX = 10000;
 constexpr size_t PADDING_SIZE_MAX = 1000;
 constexpr size_t BORDER_SIZE_MAX = 100;
 constexpr double SSCALE_MAX = 10.0;
 
-/** Number of threads used for loading thumbnails. */
+// Number of threads used for loading thumbnails
 constexpr size_t THUMB_LOAD_THREADS = 4;
 
-/**
- * Get default path for persistent storage.
- * @return default path to persistent storage
- */
-std::filesystem::path pstore_defpath()
-{
-    static constexpr std::array env_paths =
-        std::to_array<std::pair<const char*, const char*>>({
-            { "XDG_CACHE_HOME", "swayimg"        },
-            { "HOME",           ".cache/swayimg" }
-    });
-
-    for (auto [env_name, postfix] : env_paths) {
-        std::filesystem::path path;
-        const char* env = std::getenv(env_name);
-        if (!env) {
-            continue;
-        }
-        // use only the first directory if prefix is a list
-        const char* delim = strchr(env, ':');
-        if (!delim) {
-            path = env;
-        } else {
-            path = std::string(env, delim - 1);
-        }
-
-        path /= postfix;
-
-        return std::filesystem::absolute(path).lexically_normal();
-    }
-
-    return {};
-}
+// Service records in the thumbnail meta block
+constexpr const char* THUMB_META_INODE = "swayimg.inode";
+constexpr const char* THUMB_META_SIZE = "swayimg.size";
 
 Gallery& Gallery::self()
 {
@@ -68,137 +39,53 @@ Gallery& Gallery::self()
 }
 
 Gallery::Gallery()
-    : tpool(THUMB_LOAD_THREADS)
+    : aspect(Defaults::gallery::aspect)
+    , border_size(Defaults::gallery::border_size)
+    , selected_scale(Defaults::gallery::selected_scale)
+    , clr_window(Defaults::gallery::clr_window)
+    , clr_background(Defaults::gallery::clr_background)
+    , clr_select(Defaults::gallery::clr_select)
+    , clr_border(Defaults::gallery::clr_border)
+    , hover_select(Defaults::gallery::hover_select)
+    , tpool(THUMB_LOAD_THREADS)
+    , pstore_enable(Defaults::gallery::pstore_enable)
+    , pstore_path(Defaults::gallery::pstore_path())
+    , preload(Defaults::gallery::preload)
+    , cache_size(Defaults::gallery::cache_size)
 {
-    // default settings
+    mark_color = Defaults::gallery::mark_color;
+    pinch_factor = Defaults::gallery::pinch_factor;
 
-    aspect = Aspect::Fill;
-    border_size = 5;
-    selected_scale = 1.15;
-    pinch_factor = 100.0;
+    text_scheme[static_cast<size_t>(Text::TopLeft)].assign(
+        Defaults::gallery::text_scheme_tl.begin(),
+        Defaults::gallery::text_scheme_tl.end());
+    text_scheme[static_cast<size_t>(Text::TopRight)].assign(
+        Defaults::gallery::text_scheme_tr.begin(),
+        Defaults::gallery::text_scheme_tr.end());
 
-    clr_window = { argb_t::max, 0x00, 0x00, 0x00 };
-    clr_background = { argb_t::max, 0x20, 0x20, 0x20 };
-    clr_select = { argb_t::max, 0x40, 0x40, 0x40 };
-    clr_border = { argb_t::max, 0xaa, 0xaa, 0xaa };
-
-    hover_select = true;
-
-    pstore_enable = false;
-    pstore_path = pstore_defpath();
-
-    preload = false;
-    cache_size = 100;
-
-    text_scheme[static_cast<size_t>(Text::TopLeft)] = { "File:\t{name}" };
-    text_scheme[static_cast<size_t>(Text::TopRight)] = {
-        "{list.index} of {list.total}"
-    };
-
-    // default key bindings: general management
-    bind_input(InputKeyboard { XKB_KEY_Escape, KEYMOD_NONE }, []() {
-        Application::self().exit(0);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Return, KEYMOD_NONE }, []() {
-        Application::self().set_mode(Application::Mode::Viewer);
-    });
-    bind_input(InputKeyboard { XKB_KEY_s, KEYMOD_NONE }, []() {
-        Application::self().set_mode(Application::Mode::Slideshow);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Insert, KEYMOD_NONE }, [this]() {
-        const ImageEntryPtr entry = current_entry();
-        entry->mark = !entry->mark;
-        Application::redraw();
-    });
-    bind_input(InputKeyboard { XKB_KEY_f, KEYMOD_NONE }, []() {
-        Ui* ui = Application::get_ui();
-        ui->set_fullscreen(!ui->get_fullscreen());
-    });
-    bind_input(InputKeyboard { XKB_KEY_a, KEYMOD_NONE }, []() {
-        bool& antialiasing = Render::self().antialiasing;
-        antialiasing = !antialiasing;
-        Application::redraw();
-    });
-    // scale
-    bind_input(InputKeyboard { XKB_KEY_equal, KEYMOD_NONE }, [this]() {
-        const size_t size = get_thumb_size();
-        set_thumb_size(size + size / 10);
-    });
-    bind_input(InputKeyboard { XKB_KEY_plus, KEYMOD_SHIFT }, [this]() {
-        const size_t size = get_thumb_size();
-        set_thumb_size(size + size / 10);
-    });
-    bind_input(InputKeyboard { XKB_KEY_minus, KEYMOD_NONE }, [this]() {
-        const size_t size = get_thumb_size();
-        set_thumb_size(size - size / 10);
-    });
-    // image selection
-    bind_input(InputKeyboard { XKB_KEY_Home, KEYMOD_NONE }, [this]() {
-        select(Layout::First);
-    });
-    bind_input(InputKeyboard { XKB_KEY_End, KEYMOD_NONE }, [this]() {
-        select(Layout::Last);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Left, KEYMOD_NONE }, [this]() {
-        select(Layout::Left);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Right, KEYMOD_NONE }, [this]() {
-        select(Layout::Right);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Up, KEYMOD_NONE }, [this]() {
-        select(Layout::Up);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Down, KEYMOD_NONE }, [this]() {
-        select(Layout::Down);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Next, KEYMOD_NONE }, [this]() {
-        select(Layout::PgDown);
-    });
-    bind_input(InputKeyboard { XKB_KEY_Prior, KEYMOD_NONE }, [this]() {
-        select(Layout::PgUp);
-    });
-    // text layer
-    bind_input(InputKeyboard { XKB_KEY_t, KEYMOD_NONE }, []() {
-        Text& text = Text::self();
-        if (text.is_visible()) {
-            text.hide();
-        } else {
-            text.show();
-        }
-    });
-    // mouse
-    bind_input(InputMouse { InputMouse::BUTTON_LEFT, KEYMOD_NONE }, []() {
-        Application::self().set_mode(Application::Mode::Viewer);
-    });
-    bind_input(InputMouse { InputMouse::SCROLL_UP, KEYMOD_CTRL }, [this]() {
-        const size_t size = get_thumb_size();
-        set_thumb_size(size + size / 10);
-    });
-    bind_input(InputMouse { InputMouse::SCROLL_DOWN, KEYMOD_CTRL }, [this]() {
-        const size_t size = get_thumb_size();
-        set_thumb_size(size - size / 10);
-    });
-    bind_input(InputMouse { InputMouse::SCROLL_UP, KEYMOD_NONE }, [this]() {
-        select(Layout::Up);
-    });
-    bind_input(InputMouse { InputMouse::SCROLL_DOWN, KEYMOD_NONE }, [this]() {
-        select(Layout::Down);
-    });
-    bind_input(InputMouse { InputMouse::SCROLL_LEFT, KEYMOD_NONE }, [this]() {
-        select(Layout::Left);
-    });
-    bind_input(InputMouse { InputMouse::SCROLL_RIGHT, KEYMOD_NONE }, [this]() {
-        select(Layout::Right);
-    });
+    Defaults::gallery::bind_inputs(this);
 }
 
 bool Gallery::select(const Layout::Direction dir)
 {
     assert(is_active());
 
-    if (!layout.select(dir)) {
+    if (!layout.get_selected() || !layout.select(dir)) {
         return false;
     }
+    refresh();
+    switch_current();
+    return true;
+}
+
+bool Gallery::select(const Point& pt)
+{
+    assert(is_active());
+
+    if (!layout.select(pt)) {
+        return false;
+    }
+    refresh();
     switch_current();
     return true;
 }
@@ -209,25 +96,29 @@ void Gallery::reload()
     tpool.cancel();
     tpool.wait();
 
-    // clear cache
-    const std::scoped_lock lock(mutex);
-    cache.clear();
+    {
+        // clear cache
+        const std::scoped_lock lock(mutex);
+        thumbs.clear();
+    }
 
-    Application::redraw();
+    refresh();
 }
 
 void Gallery::set_thumb_aspect(const Aspect ratio)
 {
     aspect = ratio;
     if (is_active()) {
+        reload();
         Application::redraw();
     }
 }
 
 void Gallery::set_thumb_size(const size_t size)
 {
-    layout.set_thumb_size(std::clamp(size, THIMB_SIZE_MIN, THIMB_SIZE_MAX));
+    layout.set_thumb_size(std::clamp(size, THUMB_SIZE_MIN, THUMB_SIZE_MAX));
     if (is_active()) {
+        refresh();
         Application::redraw();
     }
 }
@@ -236,6 +127,7 @@ void Gallery::set_padding_size(const size_t size)
 {
     layout.set_padding(std::min(size, PADDING_SIZE_MAX));
     if (is_active()) {
+        refresh();
         Application::redraw();
     }
 }
@@ -296,11 +188,17 @@ void Gallery::enable_hover(const bool enable)
 void Gallery::set_cache_size(const size_t size)
 {
     cache_size = size;
+    if (is_active()) {
+        refresh();
+    }
 }
 
 void Gallery::enable_preload(const bool enable)
 {
     preload = enable;
+    if (is_active()) {
+        refresh();
+    }
 }
 
 void Gallery::enable_pstore(const bool enable)
@@ -318,9 +216,9 @@ void Gallery::initialize() {}
 void Gallery::activate(const ImageEntryPtr& entry, const Size& wnd)
 {
     AppMode::activate(entry, wnd);
+    layout.select(entry && !entry->removed ? entry : nullptr);
     layout.set_window_size(wnd);
-    layout.select(entry);
-    switch_current();
+    set_current(entry);
 }
 
 void Gallery::deactivate()
@@ -329,40 +227,48 @@ void Gallery::deactivate()
     tpool.wait();
 }
 
-ImageEntryPtr Gallery::current_entry()
+ImageEntryPtr Gallery::get_current()
 {
     return layout.get_selected();
+}
+
+bool Gallery::set_current(const ImageEntryPtr& entry)
+{
+    layout.select(entry && !entry->removed ? entry : nullptr);
+    refresh();
+    switch_current();
+    return true;
 }
 
 void Gallery::window_resize(const Size& wnd)
 {
     layout.set_window_size(wnd);
+    refresh();
 }
 
 void Gallery::window_redraw(Pixmap& wnd)
 {
-    layout.update();
+    const ImageEntryPtr current = layout.get_selected();
+    if (!current) {
+        draw_empty(wnd, clr_window);
+        return;
+    }
+
     wnd.fill({ 0, 0, wnd.width(), wnd.height() }, clr_window);
 
-    const ImageEntryPtr current = layout.get_selected();
-
+    const auto& scheme = layout.get_scheme();
+    size_t selected_scheme_idx = 0;
+    size_t i = 0;
     // draw all exclude the currently selected
-    for (const auto& it : layout.get_scheme()) {
-        if (it.img != current) {
-            draw(it, wnd);
-        }
-    }
-
-    // draw only currently selected
-    for (const auto& it : layout.get_scheme()) {
+    for (const auto& it : scheme) {
         if (it.img == current) {
+            selected_scheme_idx = i;
+        } else {
             draw(it, wnd);
-            break;
+            i++;
         }
     }
-
-    load_thumbnails();
-    clear_thumbnails();
+    draw(scheme[selected_scheme_idx], wnd);
 }
 
 void Gallery::handle_mmove(const InputMouse&, const Point& pos, const Point&)
@@ -374,33 +280,42 @@ void Gallery::handle_mmove(const InputMouse&, const Point& pos, const Point&)
 
 void Gallery::handle_pinch(const double scale_delta)
 {
-    set_thumb_size(get_thumb_size() + scale_delta * pinch_factor);
+    const size_t size_factor =
+        std::max(get_thumb_size(), static_cast<size_t>(100));
+    const ssize_t size_delta = scale_delta * pinch_factor * size_factor;
+    set_thumb_size(get_thumb_size() + size_delta);
 }
 
 void Gallery::handle_imagelist(const ImageListEvent event,
-                               const ImageEntryPtr& entry)
+                               const std::vector<ImageEntryPtr>& entries)
 {
+    AppMode::handle_imagelist(event, entries);
+
     if (event == ImageListEvent::Modify || event == ImageListEvent::Remove) {
         // remove entry from cache
         const std::scoped_lock lock(mutex);
-        auto it = std::find_if(cache.begin(), cache.end(),
-                               [&entry](const ThumbEntry& thumb) {
-                                   return entry == thumb.entry;
-                               });
-        if (it != cache.end()) {
-            cache.erase(it);
+        for (const auto& entry : entries) {
+            thumbs.erase(entry);
         }
     }
 
-    if (event == ImageListEvent::Remove && entry == layout.get_selected()) {
-        if (!layout.select(Layout::Right) && !layout.select(Layout::Left)) {
-            Log::info("No more images to view, exit");
-            Application::self().exit(0);
-            return;
+    if (event == ImageListEvent::Create) {
+        if (!layout.get_selected()) {
+            layout.select(entries.front());
+            switch_current();
         }
-        switch_current();
+    } else if (event == ImageListEvent::Remove) {
+        const ImageEntryPtr entry = layout.get_selected();
+        if (entry && entry->removed) {
+            if (!layout.select(Layout::Right) && !layout.select(Layout::Left)) {
+                layout.select(nullptr);
+            }
+            switch_current();
+        }
     }
+
     layout.update();
+    refresh();
     Application::redraw();
 }
 
@@ -415,7 +330,7 @@ void Gallery::draw(const Layout::Thumbnail& tlay, Pixmap& wnd)
 
     // calculate tile position/size
     Rectangle tile {
-        tlay.pos, { tile_size, tile_size }
+        tlay.pos, { .width = tile_size, .height = tile_size }
     };
     if (selected) {
         tile.width *= selected_scale;
@@ -460,10 +375,12 @@ void Gallery::draw(const Layout::Thumbnail& tlay, Pixmap& wnd)
             ? std::max(scale_w, scale_h)
             : std::min(scale_w, scale_h);
 
-        const Point pos { static_cast<ssize_t>(tile.width / 2) -
-                              static_cast<ssize_t>(scale * pm->width()) / 2,
-                          static_cast<ssize_t>(tile.height / 2) -
-                              static_cast<ssize_t>(scale * pm->height()) / 2 };
+        const Point pos {
+            .x = static_cast<ssize_t>(tile.width / 2) -
+                static_cast<ssize_t>(scale * pm->width()) / 2,
+            .y = static_cast<ssize_t>(tile.height / 2) -
+                static_cast<ssize_t>(scale * pm->height()) / 2,
+        };
 
         Pixmap sub = wnd.submap(tile);
         Render::self().draw(sub, *pm, pos, scale);
@@ -474,7 +391,8 @@ void Gallery::draw(const Layout::Thumbnail& tlay, Pixmap& wnd)
             static_cast<ssize_t>(Resource::file.width() / 2);
         const ssize_t y = bkg.y + static_cast<ssize_t>(bkg.height / 2) -
             static_cast<ssize_t>(Resource::file.height() / 2);
-        wnd.mask(Resource::file, { x, y }, { 0x20, 0xff, 0xff, 0xff });
+        wnd.mask(Resource::file, { .x = x, .y = y },
+                 { 0x20, 0xff, 0xff, 0xff });
     }
 
     // draw border
@@ -494,129 +412,129 @@ void Gallery::draw(const Layout::Thumbnail& tlay, Pixmap& wnd)
             static_cast<ssize_t>(Resource::mark.width()) - margin;
         const ssize_t y = bkg.y + static_cast<ssize_t>(bkg.height) -
             static_cast<ssize_t>(Resource::mark.height()) - margin;
-        wnd.mask(Resource::mark, { x, y }, mark_color);
+        wnd.mask(Resource::mark, { .x = x, .y = y }, mark_color);
     }
 }
 
-void Gallery::load_thumbnails()
+void Gallery::refresh()
 {
     const std::scoped_lock lock(mutex);
+    clear_invisible();
+    requeue_loading();
+}
 
+void Gallery::requeue_loading()
+{
     tpool.cancel();
-    queue.clear();
 
-    ImageList& il = ImageList::self();
     const std::vector<Layout::Thumbnail>& scheme = layout.get_scheme();
+    if (scheme.empty()) {
+        return;
+    }
 
     const size_t index_first = scheme.front().img->index;
     const size_t index_last = scheme.back().img->index;
 
     size_t preload_counter = preload ? cache_size : 0;
 
-    auto check_and_load = [this](ImageEntryPtr& entry) {
-        if (!get_thumbnail(entry) && !queue.contains(entry) &&
-            !active.contains(entry)) {
-            queue.insert(entry);
-            tpool.add([this, entry]() {
-                load_thumbnail(entry);
-            });
-        }
-    };
-
+    ImageList& il = ImageList::self();
     ImageEntryPtr fwd = layout.get_selected();
     ImageEntryPtr back = il.get(fwd, ImageList::Dir::Prev);
 
-    while (fwd || back) {
-        if (fwd) {
-            check_and_load(fwd);
-            fwd = il.get(fwd, ImageList::Dir::Next);
-            if (fwd && fwd->index > index_last) {
-                if (preload_counter) {
-                    --preload_counter;
-                } else {
-                    fwd = nullptr;
-                }
+    // put thumbnail to loading queue, returns next thumb to load
+    const auto queue_thumbnail =
+        [&](const ImageEntryPtr& entry,
+            const ImageList::Dir dir) -> ImageEntryPtr {
+        if (!get_thumbnail(entry) && !crld_thumbs.contains(entry)) {
+            tpool.add([this, entry] {
+                load_thumbnail(entry);
+            });
+        }
+        ImageEntryPtr next = nullptr;
+        if (--preload_counter) {
+            next = il.get(entry, dir);
+            if (next &&
+                ((dir == ImageList::Dir::Next && next->index > index_last) ||
+                 (dir == ImageList::Dir::Prev && next->index < index_first))) {
+                next = nullptr;
             }
         }
+        return next;
+    };
+
+    while (fwd || back) {
+        if (fwd) {
+            fwd = queue_thumbnail(fwd, ImageList::Dir::Next);
+        }
         if (back) {
-            check_and_load(back);
-            back = il.get(back, ImageList::Dir::Prev);
-            if (back && back->index < index_first) {
-                if (preload_counter) {
-                    --preload_counter;
-                } else {
-                    back = nullptr;
-                }
-            }
+            back = queue_thumbnail(back, ImageList::Dir::Prev);
         }
     }
 }
 
-void Gallery::clear_thumbnails()
+void Gallery::clear_invisible()
 {
-    const std::scoped_lock lock(mutex);
-
     const std::vector<Layout::Thumbnail>& scheme = layout.get_scheme();
+    if (scheme.empty()) {
+        thumbs.clear();
+        return;
+    }
 
-    if (cache.size() > scheme.size() + cache_size) {
+    if (thumbs.size() > scheme.size() + cache_size) {
         const size_t visible_first = scheme.front().img->index;
         const size_t visible_last = scheme.back().img->index;
         const size_t store_min =
             visible_first > cache_size / 2 ? visible_first - cache_size / 2 : 1;
         const size_t store_max = visible_last + cache_size - cache_size / 2;
 
-        std::erase_if(cache, [store_min, store_max](const ThumbEntry& thumb) {
-            return thumb.entry->index < store_min ||
-                thumb.entry->index > store_max;
-        });
+        std::erase_if(thumbs,
+                      [store_min, store_max](
+                          const std::pair<ImageEntryPtr, Pixmap>& key_value) {
+                          return key_value.first->index < store_min ||
+                              key_value.first->index > store_max;
+                      });
     }
 }
 
 const Pixmap* Gallery::get_thumbnail(const ImageEntryPtr& entry)
 {
-    const auto it = std::find_if(cache.begin(), cache.end(),
-                                 [&entry](const ThumbEntry& th) {
-                                     return entry == th.entry;
-                                 });
-    return it == cache.end() ? nullptr : &it->pm;
+    const auto it = thumbs.find(entry);
+    return it == thumbs.end() ? nullptr : &it->second;
 }
 
 void Gallery::load_thumbnail(const ImageEntryPtr& entry)
 {
     {
         const std::scoped_lock lock(mutex);
-        active.insert(entry);
-        queue.erase(entry);
+        crld_thumbs.insert(entry);
     }
 
     const size_t thumb_size = layout.get_thumb_size();
 
-    ThumbEntry thumb;
-    thumb.entry = entry;
+    Pixmap pm;
 
-    if (pstore_enable) {
-        thumb.pm = pstore_load(entry);
+    if (pstore_enable && !entry->is_special()) {
+        pm = pstore_load(entry);
     }
 
-    if (!thumb.pm) {
-        thumb.pm = FormatFactory::self().preview(entry, thumb_size,
-                                                 aspect == Aspect::Fill);
-        if (!thumb.pm) {
+    if (!pm) {
+        pm = FormatFactory::self().preview(entry, thumb_size,
+                                           aspect == Aspect::Fill);
+        if (!pm) {
             Application::self().add_event(AppEvent::FileRemove { entry->path });
-        } else if (pstore_enable) {
-            pstore_save(entry, thumb.pm);
+        } else if (pstore_enable && !entry->is_special()) {
+            pstore_save(entry, pm);
         }
     }
 
     const std::scoped_lock lock(mutex);
-
-    if (thumb.pm) {
-        thumb.entry = entry;
-        cache.emplace_back(thumb);
+    crld_thumbs.erase(entry);
+    if (pm) {
+        thumbs.insert_or_assign(entry, pm);
+        if (layout.is_visible(entry)) {
+            Application::redraw();
+        }
     }
-    active.erase(entry);
-
-    Application::redraw();
 }
 
 Pixmap Gallery::pstore_load(const ImageEntryPtr& entry) const
@@ -624,16 +542,22 @@ Pixmap Gallery::pstore_load(const ImageEntryPtr& entry) const
     std::filesystem::path thumb_path = pstore_path;
     thumb_path.concat(entry->path.string());
 
-    if (!std::filesystem::exists(thumb_path)) {
+    // use non-throwing functions, this runs in a thread pool
+    std::error_code ec;
+    if (!std::filesystem::exists(thumb_path, ec)) {
         return {};
     }
 
-    // check modification time
+    // get file stats
     struct stat st_image;
     struct stat st_thumb;
     if (stat(entry->path.c_str(), &st_image) == -1 ||
-        stat(thumb_path.c_str(), &st_thumb) == -1 ||
-        st_image.st_mtim.tv_sec > st_thumb.st_mtim.tv_sec) {
+        stat(thumb_path.c_str(), &st_thumb) == -1) {
+        return {};
+    }
+
+    // check if origin image is newer then thumbnail
+    if (st_image.st_mtim.tv_sec > st_thumb.st_mtim.tv_sec) {
         return {};
     }
 
@@ -641,17 +565,48 @@ Pixmap Gallery::pstore_load(const ImageEntryPtr& entry) const
     const ImageEntryPtr thumb_entry = std::make_shared<ImageEntry>();
     thumb_entry->path = thumb_path;
     const ImagePtr thumb_image = FormatFactory::self().load(thumb_entry);
-    if (thumb_image) {
-        return thumb_image->frames[0].pm;
+    if (!thumb_image) {
+        return {};
     }
 
-    return {};
+    // check if size or inode of origin file were changed
+    size_t tlink_inode = 0;
+    const auto it_inode = thumb_image->meta.find(THUMB_META_INODE);
+    if (it_inode != thumb_image->meta.end()) {
+        tlink_inode = std::strtoul(it_inode->second.c_str(), nullptr, 10);
+    }
+    size_t tlink_size = 0;
+    const auto it_size = thumb_image->meta.find(THUMB_META_SIZE);
+    if (it_size != thumb_image->meta.end()) {
+        tlink_size = std::strtoul(it_size->second.c_str(), nullptr, 10);
+    }
+    if (tlink_inode != st_image.st_ino ||
+        std::cmp_not_equal(tlink_size, st_image.st_size)) {
+        // remove thumbnail file
+        std::filesystem::remove(thumb_path, ec);
+        return {};
+    }
+
+    return thumb_image->frames[0].pm;
 }
 
 void Gallery::pstore_save(const ImageEntryPtr& entry, const Pixmap& thumb) const
 {
+    // fill meta info
+    std::unordered_map<std::string, std::string> meta;
+    struct stat st {};
+    stat(entry->path.c_str(), &st);
+    meta.insert_or_assign(THUMB_META_INODE, std::format("{}", st.st_ino));
+    meta.insert_or_assign(THUMB_META_SIZE, std::format("{}", st.st_size));
+
+    // save thumbnail
     std::filesystem::path thumb_path = pstore_path;
     thumb_path.concat(entry->path.string());
-    std::filesystem::create_directories(thumb_path.parent_path());
-    std::ignore = thumb.save(thumb_path);
+    // use non-throwing functions, this runs in a thread pool
+    std::error_code ec;
+    std::filesystem::create_directories(thumb_path.parent_path(), ec);
+    if (ec) {
+        return; // no storage, no thumbnail
+    }
+    FormatFactory::save(thumb, meta, thumb_path);
 }

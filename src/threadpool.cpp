@@ -4,7 +4,10 @@
 
 #include "threadpool.hpp"
 
+#include "log.hpp"
+
 #include <algorithm>
+#include <exception>
 
 // Thread pool limits
 constexpr size_t MIN_THREADS = 1;
@@ -31,35 +34,32 @@ void ThreadPool::wait()
     if (active.empty() && tasks.empty()) {
         return;
     }
-    complete.wait(lock, [this]() {
+    complete.wait(lock, [this] {
         return active.empty() && tasks.empty();
     });
 }
 
-void ThreadPool::wait(const size_t tid)
+void ThreadPool::wait(const TaskId tid)
 {
-    auto completed = [this, tid]() {
-        if (active.contains(tid)) {
+    auto completed = [this, tid] {
+        if (std::ranges::find(active, tid) != active.end()) {
             return false;
         }
-        for (const auto& it : tasks) {
-            if (it.id == tid) {
-                return false;
-            }
-        }
-        return true;
+        return std::ranges::none_of(tasks, [tid](const auto& it) {
+            return it.id == tid;
+        });
     };
 
     std::unique_lock lock(mutex);
     if (completed()) {
         return;
     }
-    complete.wait(lock, [&completed]() {
+    complete.wait(lock, [&completed] {
         return completed();
     });
 }
 
-void ThreadPool::wait(const std::vector<size_t>& tids)
+void ThreadPool::wait(const std::vector<TaskId>& tids)
 {
     for (const auto& it : tids) {
         wait(it);
@@ -68,7 +68,7 @@ void ThreadPool::wait(const std::vector<size_t>& tids)
 
 void ThreadPool::cancel()
 {
-    const std::unique_lock lock(mutex);
+    const std::scoped_lock lock(mutex);
     tasks.clear();
 }
 
@@ -81,6 +81,7 @@ void ThreadPool::start()
     quit = false;
 
     workers.reserve(threads);
+    active.reserve(threads);
     for (size_t i = 0; i < threads; ++i) {
         workers.emplace_back(&ThreadPool::run, this);
     }
@@ -104,7 +105,7 @@ void ThreadPool::run()
 {
     while (!quit) {
         std::unique_lock lock(mutex);
-        tnotify.wait(lock, [this]() {
+        tnotify.wait(lock, [this] {
             return !tasks.empty() || quit;
         });
         if (quit) {
@@ -113,14 +114,27 @@ void ThreadPool::run()
         if (!tasks.empty()) {
             const Task task = std::move(tasks.front());
             tasks.pop_front();
-            active.insert(task.id);
+            active.push_back(task.id);
             lock.unlock();
 
-            task.executor();
+            // an exception in a worker thread terminates the whole process,
+            // so lose only the failed task
+            try {
+                task.executor();
+            } catch (const std::exception& ex) {
+                Log::error("Background task failed: {}", ex.what());
+            } catch (...) {
+                Log::error("Background task failed");
+            }
 
             lock.lock();
-            active.erase(task.id);
+            const auto it = std::ranges::find(active, task.id);
+            if (it != active.end()) {
+                *it = active.back();
+                active.pop_back();
+            }
             lock.unlock();
+
             complete.notify_all();
         }
     }

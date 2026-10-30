@@ -8,6 +8,7 @@ RUN apt update && apt upgrade --yes && apt install --no-install-recommends --yes
     fonts-dejavu \
     bash-completion \
     locales \
+    libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
     libavif-dev \
     libdrm-dev \
     libexiv2-dev \
@@ -18,7 +19,6 @@ RUN apt update && apt upgrade --yes && apt install --no-install-recommends --yes
     libheif-dev \
     libheif-plugins-all \
     libjpeg-dev \
-    libjson-c-dev \
     libjxl-dev \
     libopenexr-dev \
     libopenjp2-7-dev \
@@ -29,7 +29,8 @@ RUN apt update && apt upgrade --yes && apt install --no-install-recommends --yes
     libwayland-dev \
     libwebp-dev \
     libxkbcommon-dev \
-    libluajit-5.1-dev
+    libluajit-5.1-dev \
+    libminizip-ng-dev
 
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8

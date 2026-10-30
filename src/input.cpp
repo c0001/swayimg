@@ -32,42 +32,21 @@ static constexpr std::array mouse_buttons =
         { InputMouse::BUTTON_MIDDLE, "MouseMiddle" },
         { InputMouse::BUTTON_SIDE,   "MouseSide"   },
         { InputMouse::BUTTON_EXTRA,  "MouseExtra"  },
-        { InputMouse::SCROLL_UP,     "ScrollUp"    },
-        { InputMouse::SCROLL_DOWN,   "ScrollDown"  },
-        { InputMouse::SCROLL_LEFT,   "ScrollLeft"  },
-        { InputMouse::SCROLL_RIGHT,  "ScrollRight" },
 });
 
-/**
- * Convert modifier flags to string representation.
- * @param mods combined modifier flags
- * @return text representation
- */
-static std::string modifiers_to_string(keymod_t mods)
-{
-    std::string name;
-    for (const auto& it : modifiers_name) {
-        if (mods & it.first) {
-            if (!name.empty()) {
-                name += '+';
-            }
-            name += it.second;
-        }
-    }
-    return name;
-}
+namespace {
 
 /**
  * Extract modifier flags from tokens and remove them from the vector.
  * @param tokens vector of string tokens to process
  * @return combined modifier flags
  */
-static keymod_t modifiers_from_string(std::vector<std::string>& tokens)
+keymod_t modifiers_from_string(std::vector<std::string>& tokens)
 {
     keymod_t mods = KEYMOD_NONE;
     for (auto it = tokens.begin(); it != tokens.end();) {
         const std::string& name = *it;
-        const auto kit =
+        const auto* const kit =
             std::find_if(modifiers_name.begin(), modifiers_name.end(),
                          [name](const std::pair<uint8_t, const char*>& it) {
                              return it.second == name;
@@ -87,7 +66,7 @@ static keymod_t modifiers_from_string(std::vector<std::string>& tokens)
  * @param text input string to split
  * @return vector of tokens
  */
-static std::vector<std::string> split(const std::string& text)
+std::vector<std::string> split(const std::string& text)
 {
     const std::string delimiters = "+- ";
     std::vector<std::string> tokens;
@@ -104,6 +83,22 @@ static std::vector<std::string> split(const std::string& text)
     return tokens;
 }
 
+} // anonymous namespace
+
+std::string InputKeyboard::mods_to_string(const keymod_t mods)
+{
+    std::string name;
+    for (const auto& it : modifiers_name) {
+        if (mods & it.first) {
+            if (!name.empty()) {
+                name += '+';
+            }
+            name += it.second;
+        }
+    }
+    return name;
+}
+
 std::optional<InputKeyboard> InputKeyboard::load(const std::string& expression)
 {
     std::vector<std::string> tokens = split(expression);
@@ -118,12 +113,12 @@ std::optional<InputKeyboard> InputKeyboard::load(const std::string& expression)
         return std::nullopt;
     }
 
-    return InputKeyboard { key, mods };
+    return InputKeyboard { .key = key, .mods = mods };
 }
 
 std::string InputKeyboard::to_string() const
 {
-    std::string text = modifiers_to_string(mods);
+    std::string text = mods_to_string(mods);
     if (key != XKB_KEY_NoSymbol) {
         if (!text.empty()) {
             text += '+';
@@ -146,7 +141,7 @@ std::optional<InputMouse> InputMouse::load(const std::string& expression)
     InputMouse::mouse_btn_t buttons = InputMouse::NONE;
     for (auto it = tokens.begin(); it != tokens.end();) {
         const std::string& name = *it;
-        const auto btnit = std::find_if(
+        const auto* const btnit = std::find_if(
             mouse_buttons.begin(), mouse_buttons.end(),
             [name](const std::pair<InputMouse::mouse_btn_t, const char*>& it) {
                 return it.second == name;
@@ -162,10 +157,10 @@ std::optional<InputMouse> InputMouse::load(const std::string& expression)
         return std::nullopt;
     }
 
-    return InputMouse { buttons, mods };
+    return InputMouse { .buttons = buttons, .mods = mods };
 }
 
-InputMouse::mouse_btn_t InputMouse::to_button(uint16_t code)
+InputMouse::mouse_btn_t InputMouse::to_button(const uint16_t code)
 {
     switch (code) {
         case BTN_LEFT:
@@ -178,13 +173,15 @@ InputMouse::mouse_btn_t InputMouse::to_button(uint16_t code)
             return BUTTON_SIDE;
         case BTN_EXTRA:
             return BUTTON_EXTRA;
+        default:
+            break;
     }
     return NONE;
 }
 
 std::string InputMouse::to_string() const
 {
-    std::string text = modifiers_to_string(mods);
+    std::string text = InputKeyboard::mods_to_string(mods);
     if (buttons != NONE) {
         for (const auto& it : mouse_buttons) {
             if (buttons & it.first) {

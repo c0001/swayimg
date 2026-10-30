@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include <cstdio>
 #include <cstring>
 #include <format>
-#include <iostream>
 #include <string>
 
 class Log {
@@ -17,12 +17,17 @@ public:
      * @param ... format arguments
      */
     template <typename... Args>
-    static void verbose(const std::format_string<Args...> fmt, Args&&... args)
+    static void verbose(const std::format_string<Args...> fmt,
+                        Args&&... args) noexcept
     {
         if (verbose_enable()) {
-            const std::string msg = sanitize(
-                std::vformat(fmt.get(), std::make_format_args(args...)));
-            std::cout << msg << '\n';
+            try {
+                const std::string msg = sanitize(
+                    std::vformat(fmt.get(), std::make_format_args(args...)));
+                printf("%s\n", msg.c_str());
+            } catch (const std::format_error& ex) {
+                fprintf(stderr, "%s\n", ex.what());
+            }
         }
     }
 
@@ -32,11 +37,16 @@ public:
      * @param ... format arguments
      */
     template <typename... Args>
-    static void info(const std::format_string<Args...> fmt, Args&&... args)
+    static void info(const std::format_string<Args...> fmt,
+                     Args&&... args) noexcept
     {
-        const std::string msg =
-            sanitize(std::vformat(fmt.get(), std::make_format_args(args...)));
-        std::cout << msg << '\n';
+        try {
+            const std::string msg = sanitize(
+                std::vformat(fmt.get(), std::make_format_args(args...)));
+            printf("%s\n", msg.c_str());
+        } catch (const std::format_error& ex) {
+            fprintf(stderr, "%s\n", ex.what());
+        }
     }
 
     /**
@@ -47,9 +57,13 @@ public:
     template <typename... Args>
     static void warning(const std::format_string<Args...> fmt, Args&&... args)
     {
-        const std::string msg = "WARNING: " +
-            sanitize(std::vformat(fmt.get(), std::make_format_args(args...)));
-        std::cerr << msg << '\n';
+        try {
+            const std::string msg = sanitize(
+                std::vformat(fmt.get(), std::make_format_args(args...)));
+            fprintf(stderr, "WARNING: %s\n", msg.c_str());
+        } catch (const std::format_error& ex) {
+            fprintf(stderr, "%s\n", ex.what());
+        }
     }
 
     /**
@@ -58,11 +72,16 @@ public:
      * @param ... format arguments
      */
     template <typename... Args>
-    static void error(const std::format_string<Args...> fmt, Args&&... args)
+    static void error(const std::format_string<Args...> fmt,
+                      Args&&... args) noexcept
     {
-        const std::string msg = "ERROR: " +
-            sanitize(std::vformat(fmt.get(), std::make_format_args(args...)));
-        std::cerr << msg << '\n';
+        try {
+            const std::string msg = sanitize(
+                std::vformat(fmt.get(), std::make_format_args(args...)));
+            fprintf(stderr, "ERROR: %s\n", msg.c_str());
+        } catch (const std::format_error& ex) {
+            fprintf(stderr, "%s\n", ex.what());
+        }
     }
 
     /**
@@ -72,16 +91,20 @@ public:
      * @param ... format arguments
      */
     template <typename... Args>
-    static void error(int code, const std::format_string<Args...> fmt,
-                      Args&&... args)
+    static void error(const int code, const std::format_string<Args...> fmt,
+                      Args&&... args) noexcept
     {
-        std::string msg = "ERROR: " +
-            sanitize(std::vformat(fmt.get(), std::make_format_args(args...)));
-        if (code) {
-            msg +=
-                std::format(", error code [{}] {}", code, std::strerror(code));
+        try {
+            std::string msg = sanitize(
+                std::vformat(fmt.get(), std::make_format_args(args...)));
+            if (code) {
+                msg += std::format(", error code [{}] {}", code,
+                                   std::strerror(code));
+            }
+            fprintf(stderr, "ERROR: %s\n", msg.c_str());
+        } catch (const std::format_error& ex) {
+            fprintf(stderr, "%s\n", ex.what());
         }
-        std::cerr << msg << '\n';
     }
 
     /**
@@ -117,7 +140,7 @@ public:
                     (begin_time.tv_sec * 1000000000 + begin_time.tv_nsec);
                 return static_cast<double>(ns) / 1000000000;
             }
-            return 0.0f;
+            return 0;
         }
 
         timespec begin_time = {};
@@ -134,37 +157,15 @@ private:
      */
     static std::string sanitize(const std::string& msg)
     {
-        const size_t len = msg.length();
         std::string result;
-        result.reserve(len);
+        result.reserve(msg.length());
 
-        for (size_t i = 0; i < len; ++i) {
-            const unsigned char ch = msg[i];
-            if (ch == 0x1b) {
-                ++i; // ESC: skip the entire sequence
-                if (i < len && msg[i] == '[') {
-                    // CSI: ESC [ <params> <final byte 0x40-0x7E>
-                    for (++i; i < len && msg[i] < 0x40; ++i) {}
-                } else if (i < len && msg[i] == ']') {
-                    // OSC: ESC ] ... (BEL or ST)
-                    for (++i; i < len && msg[i] != 0x07 &&
-                         !(msg[i] == 0x1b && i + 1 < len && msg[i + 1] == '\\');
-                         ++i) {}
-                    if (i < len && msg[i] == 0x1b) {
-                        ++i; // skip the \ of ST
-                    }
-                } else if (i < len && msg[i] >= 0x40 && msg[i] <= 0x5f) {
-                    // other C1: skip introducer
-                }
-            } else if (ch < 0x20 && ch != '\n') {
-                // control character: drop
-            } else if (ch == 0x7f) {
-                // DEL: drop
-            } else {
-                result += msg[i];
+        for (const unsigned char c : msg) {
+            if (c != 0x7f /* DEL */ && (c >= ' ' || c == '\n' || c == '\t')) {
+                result += static_cast<char>(c);
             }
         }
 
-        return msg;
+        return result;
     }
 };

@@ -4,19 +4,28 @@
 
 #include "../imageformat.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <format>
+#include <limits>
+
+namespace {
 
 class ImageFormatBmp : public ImageFormat {
 public:
-    ImageFormatBmp()
+    ImageFormatBmp() noexcept
         : ImageFormat(Priority::Low, "bmp")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    // NOLINTBEGIN(readability-function-cognitive-complexity)
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (!check_signature(data, { 'B', 'M' })) {
+            return nullptr;
+        }
+        // both headers are read below, the signature check only covers 2 bytes
+        if (data.size < sizeof(Header) + sizeof(Info)) {
             return nullptr;
         }
 
@@ -29,7 +38,13 @@ public:
             hdr->offset < sizeof(Header) + sizeof(Info)) {
             return nullptr;
         }
-        if (bmp->dib_size > hdr->offset) {
+        if (sizeof(Header) + bmp->dib_size > hdr->offset) {
+            return nullptr;
+        }
+        // width is never negative (only negative height has a meaning:
+        // top-down order), and std::abs(INT32_MIN) is undefined
+        if (bmp->width <= 0 || bmp->height == 0 ||
+            bmp->height == std::numeric_limits<int32_t>::min()) {
             return nullptr;
         }
 
@@ -63,7 +78,12 @@ public:
             Mask mask {};
             const uint32_t* mask_location;
             if (bmp->dib_size > BITMAPINFOHEADER_SIZE) {
-                mask_location = reinterpret_cast<const uint32_t*>(bmp + 1);
+                const size_t avail = data.size - sizeof(Header) - bmp->dib_size;
+                if (avail >= 3 * sizeof(uint32_t)) {
+                    mask_location = reinterpret_cast<const uint32_t*>(bmp + 1);
+                } else {
+                    mask_location = nullptr;
+                }
             } else {
                 mask_location =
                     (color_data_sz >= 3 * sizeof(uint32_t) ? color_data
@@ -101,6 +121,7 @@ public:
 
         return image;
     }
+    // NOLINTEND(readability-function-cognitive-complexity)
 
 private:
     // Compression types
@@ -123,9 +144,6 @@ private:
     // Sizes of DIB Headers
     static constexpr const uint8_t BITMAPINFOHEADER_SIZE = 0x28;
     static constexpr const uint8_t BITMAPINFOV2HEADER_SIZE = 0x34;
-    static constexpr const uint8_t BITMAPINFOV3HEADER_SIZE = 0x38;
-    static constexpr const uint8_t BITMAPINFOV4HEADER_SIZE = 0x6C;
-    static constexpr const uint8_t BITMAPINFOV5HEADER_SIZE = 0x7C;
 
     static constexpr const uint8_t BITS_PER_BYTE = 8;
 
@@ -171,7 +189,7 @@ private:
      * @param val source value
      * @return number of zero bits
      */
-    [[nodiscard]] constexpr size_t right_zeros(const uint32_t val) const
+    static constexpr size_t right_zeros(const uint32_t val)
     {
         size_t count = sizeof(uint32_t) * BITS_PER_BYTE;
         const size_t value = val & -static_cast<int32_t>(val);
@@ -201,7 +219,7 @@ private:
      * @param val source value
      * @return number of bits set
      */
-    [[nodiscard]] constexpr size_t bits_set(const uint32_t val) const
+    static constexpr size_t bits_set(const uint32_t val)
     {
         size_t bits = val - ((val >> 1) & 0x55555555);
         bits = (bits & 0x33333333) + ((bits >> 2) & 0x33333333);
@@ -213,12 +231,13 @@ private:
      * @param val color channel mask
      * @return shift size: positive=right, negative=left
      */
-    [[nodiscard]] constexpr ssize_t mask_shift(const uint32_t mask) const
+    static constexpr ssize_t mask_shift(const uint32_t mask)
     {
         const ssize_t start = right_zeros(mask) + bits_set(mask);
         return start - BITS_PER_BYTE;
     }
 
+    // NOLINTBEGIN(readability-function-cognitive-complexity)
     /**
      * Decode bitmap with masked colors.
      * @param pm target pixmap
@@ -228,8 +247,8 @@ private:
      * @param buffer_sz size of buffer
      * @return false if input buffer has errors
      */
-    bool decode_masked(Pixmap& pm, const Info& bmp, const Mask& mask,
-                       const uint8_t* buffer, const size_t buffer_sz) const
+    static bool decode_masked(Pixmap& pm, const Info& bmp, const Mask& mask,
+                              const uint8_t* buffer, const size_t buffer_sz)
     {
         const bool default_mask = mask.red == 0 && mask.green == 0 &&
             mask.blue == 0 && mask.alpha == 0;
@@ -243,7 +262,7 @@ private:
         const ssize_t shift_b = mask_shift(mask_b);
         const ssize_t shift_a = mask_shift(mask_a);
 
-        const size_t stride = 4 * ((bmp.width * bmp.bpp + 31) / 32);
+        const size_t stride = 4UL * ((bmp.width * bmp.bpp + 31) / 32);
 
         // check size of source buffer
         if (buffer_sz < pm.height() * stride) {
@@ -254,7 +273,7 @@ private:
             const uint8_t* src_y = buffer + y * stride;
             for (size_t x = 0; x < pm.width(); ++x) {
                 const uint8_t* src = src_y + x * (bmp.bpp / BITS_PER_BYTE);
-                uint32_t m, r, g, b, a;
+                uint32_t m;
                 if (bmp.bpp == 32) {
                     m = *reinterpret_cast<const uint32_t*>(src);
                 } else if (bmp.bpp == 16) {
@@ -262,13 +281,14 @@ private:
                 } else {
                     return false;
                 }
-                r = m & mask_r;
-                g = m & mask_g;
-                b = m & mask_b;
+                uint32_t r = m & mask_r;
+                uint32_t g = m & mask_g;
+                uint32_t b = m & mask_b;
                 r = 0xff & (shift_r > 0 ? r >> shift_r : r << -shift_r);
                 g = 0xff & (shift_g > 0 ? g >> shift_g : g << -shift_g);
                 b = 0xff & (shift_b > 0 ? b >> shift_b : b << -shift_b);
 
+                uint32_t a;
                 if (mask_a) {
                     a = m & mask_a;
                     a = 0xff & (shift_a > 0 ? a >> shift_a : a << -shift_a);
@@ -286,7 +306,9 @@ private:
 
         return true;
     }
+    // NOLINTEND(readability-function-cognitive-complexity)
 
+    // NOLINTBEGIN(readability-function-cognitive-complexity)
     /**
      * Decode RLE compressed bitmap.
      * @param pm target pixmap
@@ -296,10 +318,11 @@ private:
      * @param buffer_sz size of buffer
      * @return false if input buffer has errors
      */
-    bool decode_rle(Pixmap& pm, const Info& bmp, const Palette& palette,
-                    const uint8_t* buffer, const size_t buffer_sz) const
+    static bool decode_rle(Pixmap& pm, const Info& bmp, const Palette& palette,
+                           const uint8_t* buffer, const size_t buffer_sz)
     {
-        size_t x = 0, y = 0;
+        size_t x = 0;
+        size_t y = 0;
         size_t buffer_pos = 0;
 
         while (buffer_pos + 2 <= buffer_sz) {
@@ -322,10 +345,15 @@ private:
                     }
                     x += buffer[buffer_pos++];
                     y += buffer[buffer_pos++];
+                    // delta must not move the position outside the bitmap
+                    if (x > pm.width() || y > pm.height()) {
+                        return false;
+                    }
                 } else {
-                    // absolute mode
+                    // absolute mode, RLE4 odd run uses (n + 1) / 2 bytes
                     if (buffer_pos +
-                            (bmp.compression == BI_RLE4 ? rle2 / 2 : rle2) >
+                            (bmp.compression == BI_RLE4 ? (rle2 + 1) / 2
+                                                        : rle2) >
                         buffer_sz) {
                         return false;
                     }
@@ -360,12 +388,13 @@ private:
                 }
             } else {
                 // encoded mode
-                if (x + rle1 > pm.width()) {
-                    rle1 = pm.width() - x;
-                }
                 if (y >= pm.height()) {
                     return false;
                 }
+                // clip the run to the rest of the row, without underflow
+                const size_t room = x < pm.width() ? pm.width() - x : 0;
+                rle1 = static_cast<uint8_t>(
+                    std::min(static_cast<size_t>(rle1), room));
                 if (bmp.compression == BI_RLE8) {
                     // 8 bpp
                     if (rle2 >= palette.size) {
@@ -377,9 +406,10 @@ private:
                     }
                 } else {
                     // 4 bpp
-                    const uint8_t index[] = { static_cast<uint8_t>(rle2 >> 4),
-                                              static_cast<uint8_t>(rle2 &
-                                                                   0x0f) };
+                    const uint8_t index[] = {
+                        static_cast<uint8_t>(rle2 >> 4),
+                        static_cast<uint8_t>(rle2 & 0x0f),
+                    };
                     if (index[0] >= palette.size || index[1] >= palette.size) {
                         return false;
                     }
@@ -393,6 +423,7 @@ private:
 
         return false;
     }
+    // NOLINTEND(readability-function-cognitive-complexity)
 
     /**
      * Decode uncompressed bitmap.
@@ -403,10 +434,10 @@ private:
      * @param buffer_sz size of buffer
      * @return false if input buffer has errors
      */
-    bool decode_rgb(Pixmap& pm, const Info& bmp, const Palette& palette,
-                    const uint8_t* buffer, const size_t buffer_sz) const
+    static bool decode_rgb(Pixmap& pm, const Info& bmp, const Palette& palette,
+                           const uint8_t* buffer, const size_t buffer_sz)
     {
-        const size_t stride = 4 * ((bmp.width * bmp.bpp + 31) / 32);
+        const size_t stride = 4UL * ((bmp.width * bmp.bpp + 31) / 32);
 
         // check size of source buffer
         if (buffer_sz < pm.height() * stride) {
@@ -421,8 +452,10 @@ private:
                 if (bmp.bpp == 32) {
                     dst = *reinterpret_cast<const uint32_t*>(src);
                 } else if (bmp.bpp == 24) {
-                    dst = *reinterpret_cast<const uint32_t*>(src);
                     dst.a = argb_t::max;
+                    dst.r = src[2];
+                    dst.g = src[1];
+                    dst.b = src[0];
                 } else if (bmp.bpp == 8 || bmp.bpp == 4 || bmp.bpp == 1) {
                     // indexed colors
                     const size_t bits_offset = x * bmp.bpp;
@@ -450,4 +483,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatBmp format_bmp;
+ImageFormatBmp format_bmp;
+
+} // anonymous namespace

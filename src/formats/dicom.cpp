@@ -9,9 +9,11 @@
 #include <limits>
 #include <utility>
 
+namespace {
+
 class ImageFormatDicom : public ImageFormat {
 public:
-    ImageFormatDicom()
+    ImageFormatDicom() noexcept
         : ImageFormat(Priority::Low, "dicom")
     {
     }
@@ -19,7 +21,7 @@ public:
     static constexpr const uint8_t SIG_DATA[] = { 'D', 'I', 'C', 'M' };
     static constexpr const size_t SIG_OFFSET = 128;
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (!check_signature(data, SIG_DATA, SIG_OFFSET)) {
             return nullptr;
@@ -47,7 +49,8 @@ public:
 
             const int16_t* pixel_data =
                 reinterpret_cast<const int16_t*>(dicom.data);
-            const size_t num_pixels = dicom.width * dicom.height;
+            const size_t num_pixels =
+                static_cast<size_t>(dicom.width) * dicom.height;
 
             for (size_t i = 0; i < num_pixels; ++i) {
                 const int16_t color = pixel_data[i];
@@ -67,11 +70,12 @@ public:
         // decode image
         const int16_t* ptr = reinterpret_cast<const int16_t*>(dicom.data);
         pm.foreach([&ptr, dicom, pixel_coeff](argb_t& pixel) {
-            int16_t src_color = *ptr++;
-            src_color -= dicom.px_min;
-            src_color *= pixel_coeff;
-            const uint8_t dst_color = static_cast<uint8_t>(std::clamp(
-                src_color, static_cast<int16_t>(0), static_cast<int16_t>(255)));
+            // use wider type to avoid overflow during intermediate calculations
+            const int32_t src_color = static_cast<int32_t>(*ptr++);
+            const int32_t adjusted =
+                static_cast<int32_t>((src_color - dicom.px_min) * pixel_coeff);
+            const uint8_t dst_color =
+                static_cast<uint8_t>(std::clamp(adjusted, 0, 255));
             pixel = { argb_t::max, dst_color, dst_color, dst_color };
         });
 
@@ -97,11 +101,10 @@ private:
         const uint8_t* consume(const size_t bytes)
         {
             const uint8_t* ptr = nullptr;
-            const size_t end = position + bytes;
 
-            if (end <= data.size) {
+            if (bytes <= data.size - position) {
                 ptr = data.data + position;
-                position = end;
+                position += bytes;
             }
 
             return ptr;
@@ -193,7 +196,7 @@ private:
      * @param element output element description
      * @return false if no more elements int the stream
      */
-    bool next_element(DataStream& stream, Element& element) const
+    static bool next_element(DataStream& stream, Element& element)
     {
         // read tag
         if (!stream.read(element.tag)) {
@@ -215,17 +218,19 @@ private:
         if (element.size == 0 &&
             (element.vr == VR_OB || element.vr == VR_OW ||
              element.vr == VR_SQ || element.vr == VR_UN ||
-             element.vr == VR_UT)) {
-            if (!stream.read(element.size)) {
-                return false;
-            }
+             element.vr == VR_UT) &&
+            !stream.read(element.size)) {
+            return false;
         }
 
         // get payload data
         if (element.size == 0) {
             element.data = nullptr;
-        } else if (!(element.data = stream.consume(element.size))) {
-            return false;
+        } else {
+            element.data = stream.consume(element.size);
+            if (!element.data) {
+                return false;
+            }
         }
 
         return true;
@@ -237,7 +242,7 @@ private:
      * @param image output image description
      * @return true if image description is valid
      */
-    bool get_image(DataStream& stream, DicomImage& image) const
+    static bool get_image(DataStream& stream, DicomImage& image)
     {
         Element el;
 
@@ -263,11 +268,15 @@ private:
             }
         }
 
+        // computed in size_t: in int it overflows for big width and height
         return image.data && image.height && image.width &&
             std::cmp_equal(image.data_sz,
-                           image.width * image.height * (image.bpp / 8));
+                           static_cast<size_t>(image.width) * image.height *
+                               (image.bpp / 8));
     }
 };
 
 // register format in factory
-static ImageFormatDicom format_dicom;
+ImageFormatDicom format_dicom;
+
+} // anonymous namespace

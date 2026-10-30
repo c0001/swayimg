@@ -8,9 +8,8 @@
 
 #include <ctime>
 #include <filesystem>
-#include <list>
 #include <shared_mutex>
-#include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 /** Thread-safe list of images. */
@@ -23,7 +22,7 @@ public:
         Numeric, ///< Numeric sort
         Mtime,   ///< Modification time sort
         Size,    ///< Size sort
-        Random   ///< Random order
+        Random,  ///< Random order
     };
 
     /** Direction of the next entry. */
@@ -34,8 +33,11 @@ public:
         Prev,       ///< Previous entry
         NextParent, ///< Next entry with different parent
         PrevParent, ///< Previous entry with different parent
-        Random      ///< Random entry
+        Random,     ///< Random entry
     };
+
+    using EntriesArray = std::vector<ImageEntryPtr>;
+    using EntriesMap = std::unordered_map<std::filesystem::path, ImageEntryPtr>;
 
     /**
      * Get global instance of image list.
@@ -43,34 +45,34 @@ public:
      */
     static ImageList& self();
 
+    /** Constructor. */
+    ImageList();
+
     /**
-     * Load image list from specified sources.
+     * Add all images in specified sources.
      * @param sources list of sources to load
-     * @return first entry from source list
+     * @return list of added entries in source order
      */
-    ImageEntryPtr load(const std::vector<std::filesystem::path>& sources);
+    EntriesArray add(const std::vector<std::filesystem::path>& sources);
 
     /**
-     * Load image list from text file.
-     * @param list_file path to the file to load
-     * @return first entry from source list
+     * Remove all given paths from the list.
+     * @param sources entries paths to remove
+     * @return list of removed entries
      */
-    ImageEntryPtr load(const std::filesystem::path& list_file);
-
-    /**
-     * Add file or special source to the list.
-     * @param path path to the file or special source
-     * @return array of added entries
-     */
-    std::vector<ImageEntryPtr> add(const std::filesystem::path& path);
+    EntriesArray remove(const std::vector<std::filesystem::path>& sources);
 
     /**
      * Remove image entry from the list.
      * @param entry entry to remove
-     * @param forward direction of nearest returned entry
-     * @return valid nearest entry or nullptr if list is empty
      */
-    ImageEntryPtr remove(const ImageEntryPtr& entry, bool forward = true);
+    void remove(const ImageEntryPtr& entry);
+
+    /**
+     * Clear image list.
+     * @return list of removed entries
+     */
+    EntriesArray clear();
 
     /**
      * Get number of entries in the image list.
@@ -97,6 +99,12 @@ public:
     void set_reverse(const bool enable);
 
     /**
+     * Get image list reverse mode.
+     * @return reverse mode of the image list
+     */
+    bool get_reverse() const { return reverse; }
+
+    /**
      * Find image entry by source path.
      * @param path path to the file or special source
      * @return image entry or nullptr if entry not found
@@ -107,7 +115,7 @@ public:
      * Get array with copy of all entries in the list.
      * @return array with all entries
      */
-    std::vector<ImageEntry> get_all();
+    EntriesArray get_all();
 
     /**
      * Get next entry from the list.
@@ -134,63 +142,96 @@ public:
 
 private:
     /**
-     * Add file or special source to the list.
-     * @param path path to the file or special source
-     * @param ordered flag to add new entry to ordered position in the list
-     * @return array of added entries
+     * Get child entries by directory path.
+     * @param path parent directory
+     * @return list of entries
      */
-    std::vector<ImageEntryPtr> add(const std::filesystem::path& path,
-                                   const bool ordered);
+    EntriesArray get_child(const std::filesystem::path& path) const;
+
+    /**
+     * Get the nearest entry for specified removed one.
+     * @param entry removed image entry
+     * @param forward direction of nearest returned entry
+     * @return image entry or nullptr if entry not found
+     */
+    ImageEntryPtr get_removed(const ImageEntryPtr& entry,
+                              const bool forward) const;
+
+    /**
+     * Get the nearest entry with different parent.
+     * @param from starting image entry
+     * @param forward direction of nearest returned entry
+     * @return image entry or nullptr if entry not found
+     */
+    ImageEntryPtr get_diffparent(const ImageEntryPtr& from,
+                                 const bool forward) const;
+
+    /**
+     * Get random entry.
+     * @param excl excluded image entry
+     * @return image entry or nullptr if entry not found
+     */
+    ImageEntryPtr get_random(const ImageEntryPtr& excl) const;
+
+    /**
+     * Add file, directory or special source to the list.
+     * @param path path to the file or special source
+     * @return list of added entries
+     */
+    EntriesArray add_any(const std::filesystem::path& path);
 
     /**
      * Add files from the directory to the list.
      * @param path path to the directory
-     * @param ordered flag to add new entry to ordered position in the list
-     * @return array with added entries
+     * @return list with added entries
      */
-    std::vector<ImageEntryPtr> add_dir(const std::filesystem::path& path,
-                                       const bool ordered);
+    EntriesArray add_dir(const std::filesystem::path& path);
 
     /**
      * Add file to the list.
      * @param path path to the file
-     * @param ordered flag to add new entry to ordered position in the list
      * @return added entry
      */
-    ImageEntryPtr add_file(const std::filesystem::path& path,
-                           const bool ordered);
+    ImageEntryPtr add_file(const std::filesystem::path& path);
 
     /**
      * Add new entry to the list.
-     * @param entry image entry to add
-     * @param ordered flag to add new entry to ordered position in the list
-     * @return false if entry already exists
+     * @param path path to the image file
+     * @param mtime file modification time
+     * @param size size of the file
+     * @return added entry (nullptr if already exists)
      */
-    bool add_entry(ImageEntryPtr& entry, const bool ordered);
+    ImageEntryPtr add_entry(const std::filesystem::path& path,
+                            const std::time_t mtime = 0, const size_t size = 0);
 
     /**
-     * Sort image list.
-     * @param locked flag to lock the list before processing
+     * Sort and reindex image list.
      */
-    void sort(bool locked);
+    void sort();
+
+    /**
+     * Sort specified image list.
+     * @param entries image list to sort
+     */
+    void sort(EntriesArray& entries) const;
 
     /**
      * Reindex the image list.
+     * @param index (0-based) to start reindexing from
      */
-    void reindex();
+    void reindex(const size_t index = 0);
 
 private:
-    std::list<ImageEntryPtr> entries; ///< List of image entries
-    std::shared_mutex mutex;          ///< Image list mutex
+    EntriesArray entries_arr; ///< Array of image entries
+    EntriesMap entries_map;   ///< Map of path to image entries
 
-    /** Set of paths used for searching duplicates. */
-    std::unordered_set<std::filesystem::path> duplicates;
+    std::shared_mutex mutex; ///< Image list mutex
 
-    Order order = Order::Numeric; ///< Image list order
-    bool reverse = false;         ///< Reverse order flag
+    Order order;  ///< Image list order
+    bool reverse; ///< Reverse order flag
 
 public:
-    bool recursive = false; ///< Read directories recursively
-    bool adjacent = false;  ///< Open adjacent files from the same directory
-    bool fsmon = true;      ///< FS monitor usage
+    bool recursive; ///< Read directories recursively
+    bool adjacent;  ///< Open adjacent files from the same directory
+    bool fsmon;     ///< FS monitor usage
 };

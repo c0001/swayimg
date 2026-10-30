@@ -7,26 +7,18 @@
 #include "render.hpp"
 
 #include <cassert>
-#include <limits>
 
-// Image entry index used for removed entries.
-constexpr size_t INVALID_INDEX = std::numeric_limits<size_t>::max();
-
-void ImageEntry::remove()
+bool ImageEntry::is_special(const std::string& path)
 {
-    index = INVALID_INDEX;
-}
-
-ImageEntry::operator bool() const
-{
-    return index != INVALID_INDEX;
+    return path.starts_with(ImageEntry::SRC_STDIN) ||
+        path.starts_with(ImageEntry::SRC_EXEC);
 }
 
 void Image::draw(const size_t frame, Pixmap& target, const double scale,
                  const ssize_t x, const ssize_t y)
 {
     assert(frame < frames.size());
-    Render::self().draw(target, frames[frame].pm, { x, y }, scale);
+    Render::self().draw(target, frames[frame].pm, { .x = x, .y = y }, scale);
 }
 
 void Image::flip_vertical()
@@ -43,7 +35,7 @@ void Image::flip_horizontal()
     }
 }
 
-void Image::rotate(size_t angle)
+void Image::rotate(const size_t angle)
 {
     for (auto& it : frames) {
         it.pm.rotate(angle);

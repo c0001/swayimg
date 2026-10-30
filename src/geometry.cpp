@@ -6,14 +6,26 @@
 
 #include <algorithm>
 
+bool Point::operator==(const Point& other) const
+{
+    return x == other.x && y == other.y;
+}
+
+Point& Point::operator+=(const Point& other)
+{
+    x += other.x;
+    y += other.y;
+    return *this;
+}
+
 Point Point::operator+(const Point& delta) const
 {
-    return { x + delta.x, y + delta.y };
+    return { .x = x + delta.x, .y = y + delta.y };
 }
 
 Point Point::operator-(const Point& other) const
 {
-    return { x - other.x, y - other.y };
+    return { .x = x - other.x, .y = y - other.y };
 }
 
 Size Size::operator*(double factor) const
@@ -21,20 +33,26 @@ Size Size::operator*(double factor) const
     if (factor <= 0.0) {
         return {};
     }
-    return { static_cast<size_t>(factor * width),
-             static_cast<size_t>(factor * height) };
+    return {
+        .width = static_cast<size_t>(factor * width),
+        .height = static_cast<size_t>(factor * height),
+    };
 }
 
 Rectangle::Rectangle(const ssize_t x, const ssize_t y, const size_t width,
                      const size_t height)
-    : Point(x, y)
-    , Size(width, height)
+    : x(x)
+    , y(y)
+    , width(width)
+    , height(height)
 {
 }
 
 Rectangle::Rectangle(const Point& pos, const Size& size)
-    : Point(pos)
-    , Size(size)
+    : x(pos.x)
+    , y(pos.y)
+    , width(size.width)
+    , height(size.height)
 {
 }
 
@@ -57,7 +75,10 @@ Rectangle Rectangle::intersect(const Rectangle& other) const
 std::tuple<Rectangle, Rectangle, Rectangle, Rectangle>
 Rectangle::cutout(const Rectangle& cut) const
 {
-    Rectangle top, bottom, left, right;
+    Rectangle top;
+    Rectangle bottom;
+    Rectangle left;
+    Rectangle right;
 
     // top
     if (cut.y > y) {
@@ -68,11 +89,12 @@ Rectangle::cutout(const Rectangle& cut) const
     }
 
     // bottom
-    if (y + cut.y + cut.height < height) {
+    if (y + cut.y + static_cast<ssize_t>(cut.height) <
+        y + static_cast<ssize_t>(height)) {
         bottom.x = x;
         bottom.y = cut.y + cut.height;
         bottom.width = width;
-        bottom.height = height - bottom.y;
+        bottom.height = (y + height) - bottom.y;
     }
 
     // left
@@ -84,10 +106,11 @@ Rectangle::cutout(const Rectangle& cut) const
     }
 
     // right
-    if (x + cut.x + cut.width < width) {
+    if (x + cut.x + static_cast<ssize_t>(cut.width) <
+        x + static_cast<ssize_t>(width)) {
         right.x = cut.x + cut.width;
         right.y = cut.y;
-        right.width = width - cut.x - cut.width;
+        right.width = (x + width) - cut.x - cut.width;
         right.height = cut.height;
     }
 

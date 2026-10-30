@@ -9,14 +9,16 @@
 #include <cstdlib>
 #include <utility>
 
+namespace {
+
 class ImageFormatSixel : public ImageFormat {
 public:
-    ImageFormatSixel()
+    ImageFormatSixel() noexcept
         : ImageFormat(Priority::Low, "sixel")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         // check signature: sixel always starts with Esc code
         if (data.data[0] != 0x1b) {
@@ -27,7 +29,9 @@ public:
         SIXELSTATUS status;
         uint8_t* pixels = nullptr;
         uint8_t* palette = nullptr;
-        int width = 0, height = 0, ncolors = 0;
+        int width = 0;
+        int height = 0;
+        int ncolors = 0;
         status = sixel_decode_raw(const_cast<uint8_t*>(data.data), data.size,
                                   &pixels, &width, &height, &palette, &ncolors,
                                   nullptr);
@@ -50,7 +54,7 @@ public:
                 dst.a = argb_t::max;
                 const uint8_t color = pixels[y * width + x];
                 if (std::cmp_less_equal(color, ncolors)) {
-                    const uint8_t* rgb = &palette[color * 3];
+                    const uint8_t* rgb = &palette[color * 3UL];
                     dst.r = rgb[0];
                     dst.g = rgb[1];
                     dst.b = rgb[2];
@@ -68,4 +72,6 @@ public:
 };
 
 // register format in factory
-static ImageFormatSixel format_sixel;
+ImageFormatSixel format_sixel;
+
+} // anonymous namespace

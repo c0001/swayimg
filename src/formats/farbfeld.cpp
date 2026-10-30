@@ -8,26 +8,34 @@
 
 #include <cstring>
 
+namespace {
+
 class ImageFormatFarbfeld : public ImageFormat {
 public:
-    ImageFormatFarbfeld()
+    ImageFormatFarbfeld() noexcept
         : ImageFormat(Priority::Low, "farbfeld")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (!check_signature(data,
                              { 'f', 'a', 'r', 'b', 'f', 'e', 'l', 'd' })) {
             return nullptr;
         }
 
+        if (data.size < sizeof(Header)) {
+            return nullptr;
+        }
         const Header* header = reinterpret_cast<const Header*>(data.data);
 
-        // check for data enough
+        // check for data enough, size limit first: the product of two
+        // 32-bit sides and pixel size can overflow 64-bit size_t
         const size_t width = htonl(header->width);
         const size_t height = htonl(header->height);
-        if (data.size - sizeof(Header) < width * height * sizeof(Pixel)) {
+        if (width == 0 || height == 0 || width > MAX_SIZE ||
+            height > MAX_SIZE ||
+            (data.size - sizeof(Header)) / sizeof(Pixel) < width * height) {
             return nullptr;
         }
 
@@ -35,7 +43,7 @@ public:
         ImagePtr image = std::make_shared<Image>();
         image->frames.resize(1);
         Pixmap& pm = image->frames[0].pm;
-        pm.create(Pixmap::ARGB, htonl(header->width), htonl(header->height));
+        pm.create(Pixmap::ARGB, width, height);
 
         // decode image
         const Pixel* src =
@@ -54,6 +62,9 @@ public:
     }
 
 private:
+    // Max size of image
+    static constexpr const size_t MAX_SIZE = 65536;
+
     // Farbfeld file header
     struct __attribute__((__packed__)) Header {
         uint8_t magic[8];
@@ -71,4 +82,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatFarbfeld format_farbfeld;
+ImageFormatFarbfeld format_farbfeld;
+
+} // anonymous namespace

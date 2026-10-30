@@ -9,21 +9,18 @@
 // freetype stuff
 #include <ft2build.h>
 #include FT_FREETYPE_H
-#include FT_GLYPH_H
 
 #include <filesystem>
+#include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
-/** Font render. */
+/** Single font. */
 class Font {
 public:
-    ~Font();
-
-    /**
-     * Check if font was loaded.
-     * @return true if font was loaded
-     */
-    inline operator bool() const { return ft_face; }
+    Font() noexcept;
+    virtual ~Font() = default;
 
     /**
      * Load font by name.
@@ -48,29 +45,45 @@ public:
     bool load(const uint8_t* data, const size_t data_size);
 
     /**
+     * Free/release font handle.
+     * Swayimg contains an architectural flaw related to global static
+     * instances: the order in which destructors are called is undefined,
+     * which means that the automatic release of handles can lead to
+     * use-after-free errors.
+     * As a workaround, manual management is required (todo!).
+     */
+    void free();
+
+    /**
      * Get font name.
      * @return font name
      */
-    [[nodiscard]] const char* name() const;
+    const char* name() const;
 
     /**
      * Set font size.
      * @param size new font size in pixels
      */
-    void set_size(const size_t size);
+    virtual void set_size(const size_t size);
 
     /**
      * Set font scale based on Wayland scale.
      * @param scale the scale factor to multiply by
      */
-    void set_scale(const double scale);
+    virtual void set_scale(const double scale);
 
     /**
-     * Render single text line.
-     * @param text string to print
-     * @return masked surface
+     * Get glyph pixmap for the character.
+     * @param ch character to render
+     * @return glyph pixmap, nullptr if not found
      */
-    [[nodiscard]] Pixmap render(const std::string& text);
+    virtual const Pixmap* get_glyph(const wchar_t ch);
+
+    /**
+     * Check if font is loaded.
+     * @return true if font is loaded
+     */
+    operator bool() const { return !!ft_face; }
 
 private:
     /**
@@ -79,9 +92,37 @@ private:
      */
     void set_face(FT_Face face);
 
-private:
-    FT_Face ft_face = nullptr; ///< Font face instance
+protected:
+    FT_Face ft_face { nullptr }; ///< Font face instance
+    size_t size;                 ///< Font size in pixels
+    double scale { 1.0 };        ///< Font scale
 
-    size_t size = 24;   ///< Font size in pixels
-    double scale = 1.0; ///< Font scale
+    std::unordered_map<wchar_t, Pixmap> glyphs; ///< Rendered glyph images
+};
+
+/** Set of fonts. */
+class FontSet : public Font {
+public:
+    /**
+     * Set font size.
+     * @param size new font size in pixels
+     */
+    void set_size(const size_t size) override;
+
+    /**
+     * Set font scale based on Wayland scale.
+     * @param scale the scale factor to multiply by
+     */
+    void set_scale(const double scale) override;
+
+    /**
+     * Get glyph pixmap for the character.
+     * @param ch character to render
+     * @return glyph pixmap, nullptr if not found
+     */
+    const Pixmap* get_glyph(const wchar_t ch) override;
+
+private:
+    using FontPtr = std::unique_ptr<Font>;
+    std::vector<FontPtr> fonts; ///< Additional fonts
 };

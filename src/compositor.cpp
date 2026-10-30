@@ -14,7 +14,9 @@
 #include <cstring>
 #include <format>
 
-using json = nlohmann::json;
+using nlohmann::json;
+
+namespace {
 
 /** UNIX socket wrapper for IPC communication. */
 class UnixSocket {
@@ -33,7 +35,7 @@ public:
      * Check if socket opened.
      * @return true if socket opened.
      */
-    inline operator bool() const { return fd != -1; }
+    operator bool() const { return fd != -1; }
 
     /**
      * Connect to UNIX socket.
@@ -53,7 +55,7 @@ public:
         sa.sun_family = AF_UNIX;
         memcpy(sa.sun_path, path, len);
 
-        fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
         if (fd == -1) {
             Log::error(errno, "Failed to open IPC socket {}", path);
             return false;
@@ -154,8 +156,8 @@ public:
         const json focus = ipc.find_focused(response);
 
         if (focus.contains("rect") && focus.contains("window_rect")) {
-            const Rectangle rect = ipc.get_rect(focus["rect"]);
-            const Rectangle wrect = ipc.get_rect(focus["window_rect"]);
+            const Rectangle rect = SwayIpc::get_rect(focus["rect"]);
+            const Rectangle wrect = SwayIpc::get_rect(focus["window_rect"]);
             if (rect && wrect) {
                 wnd = rect;
                 wnd.x += wrect.x;
@@ -183,7 +185,7 @@ public:
      */
     static bool set_overlay(const Rectangle& wnd)
     {
-        if (!static_cast<Point>(wnd)) {
+        if (!wnd.position_valid()) {
             return false;
         }
 
@@ -210,7 +212,7 @@ private:
 
     /** Sway IPC magic header value. */
     static constexpr const uint8_t ipc_magic[] = {
-        'i', '3', '-', 'i', 'p', 'c'
+        'i', '3', '-', 'i', 'p', 'c',
     };
 
     /** Sway IPC message type. */
@@ -241,8 +243,7 @@ private:
      * @param payload payload data
      * @return response as JSON object
      */
-    [[nodiscard]] const json request(IpcType mt,
-                                     const std::string& payload) const
+    [[nodiscard]] json request(IpcType mt, const std::string& payload) const
     {
         IpcHeader header;
         std::memcpy(header.magic, ipc_magic, sizeof(ipc_magic));
@@ -279,7 +280,7 @@ private:
      * @param node parent JSON node
      * @return pointer to focused window node
      */
-    [[nodiscard]] const json find_focused(const json& node) const
+    [[nodiscard]] json find_focused(const json& node) const
     {
         if (node.contains("focused")) {
             const auto& focused = node["focused"];
@@ -296,7 +297,7 @@ private:
             if (!nodes.is_array()) {
                 continue;
             }
-            for (auto& subnode : nodes) {
+            for (const auto& subnode : nodes) {
                 const auto& result = find_focused(subnode);
                 if (!result.empty()) {
                     return result;
@@ -312,7 +313,7 @@ private:
      * @param node JSON node
      * @return rectangle geometry
      */
-    [[nodiscard]] Rectangle get_rect(const json& node) const
+    [[nodiscard]] static Rectangle get_rect(const json& node)
     {
         Rectangle rect;
 
@@ -355,7 +356,7 @@ public:
     static Rectangle get_focus()
     {
         Rectangle wnd;
-        int monitor_id;
+        int monitor_id = -1;
 
         // get clients list
         const json clients = HyprlandIpc::request("j/clients");
@@ -389,34 +390,13 @@ public:
             wnd.height = size.at(1).get<size_t>();
             break;
         }
-        if (!wnd) {
-            return {};
-        }
 
-        // get monitors list
-        const json monitors = HyprlandIpc::request("j/monitors");
-        if (monitors.empty()) {
-            return {};
-        }
-        for (const auto& it : monitors) {
-            if (!it.contains("id") || !it.contains("x") || !it.contains("y")) {
-                continue;
+        if (wnd && monitor_id >= 0) {
+            const Point mon_pos = get_monitor_pos(monitor_id);
+            if (mon_pos) {
+                wnd.x -= mon_pos.x;
+                wnd.y -= mon_pos.y;
             }
-            const json& id = it["id"];
-            if (!id.is_number() || id.get<int>() != monitor_id) {
-                continue;
-            }
-            const json& x = it["x"];
-            if (!x.is_number()) {
-                continue;
-            }
-            const json& y = it["y"];
-            if (!y.is_number()) {
-                continue;
-            }
-            wnd.x -= x.get<ssize_t>();
-            wnd.y -= y.get<ssize_t>();
-            break;
         }
 
         return wnd;
@@ -434,22 +414,54 @@ public:
         app_id += '_';
         app_id += std::to_string(getpid());
 
-        // add rules
-        if (static_cast<Point>(wnd)) {
-            HyprlandIpc::request(std::format(
-                "keyword windowrule float on, match:class {}", app_id));
-            HyprlandIpc::request(
-                std::format("keyword windowrule move {} {}, match:class {}",
-                            wnd.x, wnd.y, app_id));
+        // construct window rule
+        std::string rule = "hl.window_rule({ name = \"swayimg\", ";
+        rule += std::format("match = {{ class = \"{}\" }},", app_id);
+        if (wnd.position_valid()) {
+            rule += std::format("move = {{ {}, {} }},", wnd.x, wnd.y);
         }
-        if (static_cast<Size>(wnd)) {
-            HyprlandIpc::request(
-                std::format("keyword windowrule size {} {}, match:class {}",
-                            wnd.width, wnd.height, app_id));
+        if (wnd.size_valid()) {
+            rule += std::format("size = {{ {}, {} }},", wnd.width, wnd.height);
         }
+        rule += "float = true})";
+
+        // send request
+        HyprlandIpc::request(std::format("eval {}", rule));
     }
 
 private:
+    /**
+     * Get monitor position.
+     * @param mon_id monitor id
+     * @return monitor position
+     */
+    static Point get_monitor_pos(const int mon_id)
+    {
+        const json monitors = HyprlandIpc::request("j/monitors");
+        if (monitors.empty()) {
+            return {};
+        }
+        for (const auto& it : monitors) {
+            if (!it.contains("id") || !it.contains("x") || !it.contains("y")) {
+                continue;
+            }
+            const json& id = it["id"];
+            if (!id.is_number() || id.get<int>() != mon_id) {
+                continue;
+            }
+            const json& x = it["x"];
+            if (!x.is_number()) {
+                continue;
+            }
+            const json& y = it["y"];
+            if (!y.is_number()) {
+                continue;
+            }
+            return { .x = x.get<ssize_t>(), .y = y.get<ssize_t>() };
+        }
+        return {};
+    }
+
     /**
      * Get path to Hyprland IPC socket.
      * @return path to UNIX socket
@@ -500,13 +512,13 @@ private:
     }
 };
 
+} // anonymous namespace
+
 Compositor::Compositor()
-    : type(None)
 {
     if (SwayIpc::available()) {
         type = Sway;
-    }
-    if (HyprlandIpc::available()) {
+    } else if (HyprlandIpc::available()) {
         type = Hyprland;
     }
 }

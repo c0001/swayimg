@@ -5,41 +5,57 @@
 #include "appmode.hpp"
 
 #include "application.hpp"
+#include "imagelist.hpp"
+#include "resources.hpp"
 
 #include <format>
 
 AppMode::AppMode()
 {
-    mark_color = { argb_t::max, 0x80, 0x80, 0x80 };
-    pinch_factor = 1.0;
+    on_unassigned_key = [](const InputKeyboard& input) {
+        const std::string msg =
+            std::format("Unhandled key: {}", input.to_string());
+        Text::self().set_status(msg);
+    };
 }
 
 void AppMode::activate(const ImageEntryPtr&, const Size&)
 {
     Text& text = Text::self();
+    text.clear();
     for (size_t i = 0; i < text_scheme.size(); ++i) {
         text.set_scheme(static_cast<Text::Position>(i), text_scheme[i]);
     }
 }
 
-bool AppMode::handle_keyboard(const InputKeyboard& input)
+void AppMode::handle_keyboard(const InputKeyboard& input)
 {
     const auto& bind = kbindings.find(input);
     if (bind != kbindings.end()) {
         bind->second();
-        return true;
+    } else if (!Xkb::is_modifier(input.key)) {
+        on_unassigned_key(input);
     }
-    return false;
 }
 
-bool AppMode::handle_mclick(const InputMouse& input, const Point&)
+void AppMode::handle_scroll(const keymod_t kmods, const double delta_h,
+                            const double delta_v) const
+{
+    if (on_scroll) {
+        on_scroll(kmods, delta_h, delta_v);
+    }
+}
+
+void AppMode::handle_mclick(const InputMouse& input, const Point&)
 {
     const auto& bind = mbindings.find(input);
     if (bind != mbindings.end()) {
         bind->second();
-        return true;
+    } else {
+        const std::string msg =
+            std::format("Unhandled mouse: {}", input.to_string());
+        Text::self().set_status(msg);
     }
-    return false;
 }
 
 bool AppMode::handle_signal(const InputSignal& input)
@@ -52,14 +68,36 @@ bool AppMode::handle_signal(const InputSignal& input)
     return false;
 }
 
+void AppMode::handle_imagelist(const ImageListEvent,
+                               const std::vector<ImageEntryPtr>&)
+{
+    const ImageEntryPtr entry = get_current();
+    Text& text = Text::self();
+    text.set_field(Text::FIELD_LIST_INDEX,
+                   entry ? std::to_wstring(entry->index + 1) : L"");
+    text.set_field(Text::FIELD_LIST_TOTAL,
+                   std::to_wstring(ImageList::self().size()));
+    text.update();
+}
+
 bool AppMode::is_active() const
 {
     return Application::self().current_mode() == this;
 }
 
-void AppMode::subscribe_image_switch(const ImageSwitchNotify& cb)
+void AppMode::mark_current(const std::optional<bool>& state)
 {
-    img_switch.push_back(cb);
+    const ImageEntryPtr entry = get_current();
+    if (entry) {
+        if (state.has_value()) {
+            entry->mark = state.value();
+        } else {
+            entry->mark = !entry->mark;
+        }
+        if (is_active()) {
+            Application::redraw();
+        }
+    }
 }
 
 void AppMode::set_mark_color(const argb_t& color)
@@ -114,21 +152,45 @@ void AppMode::bind_input(const InputSignal& input, const InputCallback& handler)
 
 void AppMode::switch_current()
 {
-    const ImageEntryPtr current = current_entry();
+    const ImageEntryPtr entry = get_current();
 
     // set window title
-    Ui* ui = Application::self().get_ui();
-    const std::string title =
-        std::format("Swayimg: {}", current->path.filename().string());
+    Ui* ui = Application::get_ui();
+    std::string title = "Swayimg: ";
+    if (entry) {
+        title += entry->path.filename().string();
+    } else {
+        title += "no image";
+    }
     ui->set_title(title.c_str());
 
     // update text layer
-    Text::self().reset(current);
+    Text& text = Text::self();
+    if (entry) {
+        text.reset(entry);
+    } else {
+        text.clear();
+        text.set_status("Image list is empty");
+    }
 
-    // call handlers
-    for (auto& it : img_switch) {
-        it();
+    if (on_image_change) {
+        on_image_change();
     }
 
     Application::redraw();
+}
+
+void AppMode::draw_empty(Pixmap& wnd, const argb_t bkg)
+{
+    // fill window
+    wnd.fill({ 0, 0, wnd.width(), wnd.height() }, bkg);
+    const ssize_t x = static_cast<ssize_t>(wnd.width() / 2) -
+        static_cast<ssize_t>(Resource::empty.width() / 2);
+    const ssize_t y = static_cast<ssize_t>(wnd.height() / 2) -
+        static_cast<ssize_t>(Resource::empty.height() / 2);
+
+    // draw placeholder
+    const argb_t mask(argb_t::max, argb_t::max - bkg.r, argb_t::max - bkg.g,
+                      argb_t::max - bkg.b);
+    wnd.mask(Resource::empty, { .x = x, .y = y }, mask);
 }

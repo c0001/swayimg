@@ -4,10 +4,17 @@
 
 #include "layout.hpp"
 
+#include "defaults.hpp"
 #include "imagelist.hpp"
 
 #include <cassert>
 #include <utility>
+
+Layout::Layout()
+    : thumb_size(Defaults::gallery::thumb_size)
+    , thumb_padding(Defaults::gallery::thumb_padding)
+{
+}
 
 void Layout::update()
 {
@@ -17,11 +24,15 @@ void Layout::update()
 
     ImageList& il = ImageList::self();
     const ImageEntryPtr first_entry = il.get(nullptr, ImageList::Dir::First);
-
+    if (!first_entry) {
+        sel_entry = nullptr;
+        scheme.clear();
+        return;
+    }
     if (!sel_entry) {
         sel_entry = first_entry;
     }
-    assert(*sel_entry);
+    assert(!sel_entry->removed);
 
     columns = std::max(static_cast<size_t>(1),
                        window.width / (thumb_size + thumb_padding));
@@ -227,6 +238,26 @@ const Layout::Thumbnail* Layout::at(const Point& pos) const
 ImageEntryPtr Layout::get_selected() const
 {
     return sel_entry;
+}
+
+bool Layout::is_visible(const ImageEntryPtr& entry) const
+{
+    assert(entry);
+
+    if (scheme.empty()) {
+        return false;
+    }
+
+    const ImageEntryPtr& first = scheme.front().img;
+    const ImageEntryPtr& last = scheme.back().img;
+
+    // skip check if scheme entries have been removed since last update
+    if (!first || first->removed || !last || last->removed || entry->removed) {
+        return false;
+    }
+
+    ImageList& il = ImageList::self();
+    return il.distance(entry, first) <= 0 && il.distance(entry, last) >= 0;
 }
 
 const std::vector<Layout::Thumbnail>& Layout::get_scheme() const

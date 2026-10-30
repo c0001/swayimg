@@ -3,11 +3,11 @@
 Swayimg is a fully customizable image viewer with [Lua scripting](CONFIG.md) support.
 
 - Support for the most popular image formats:
-  - JPEG (via [libjpeg](http://libjpeg.sourceforge.net)),
+  - JPEG (via [libjpeg](https://libjpeg.sourceforge.net)),
   - JPEG XL (via [libjxl](https://github.com/libjxl/libjxl));
   - JPEG 2000 (via [OpenJPEG](https://www.openjpeg.org));
-  - PNG (via [libpng](http://www.libpng.org));
-  - GIF (via [giflib](http://giflib.sourceforge.net));
+  - PNG (via [libpng](https://www.libpng.org));
+  - GIF (via [giflib](https://giflib.sourceforge.net));
   - SVG (via [librsvg](https://gitlab.gnome.org/GNOME/librsvg));
   - WebP (via [libwebp](https://chromium.googlesource.com/webm/libwebp));
   - HEIF/HEIC (via [libheif](https://github.com/strukturag/libheif));
@@ -16,13 +16,17 @@ Swayimg is a fully customizable image viewer with [Lua scripting](CONFIG.md) sup
   - Sixel (via [libsixel](https://github.com/saitoha/libsixel));
   - Raw: CRW/CR2, NEF, RAF, etc (via [libraw](https://www.libraw.org));
   - EXR (via [OpenEXR](https://openexr.com));
-  - TTF/OTF fonts preview (via [FreeType](https://freetype.org));
+  - Krita (via [minizip-ng](https://github.com/zlib-ng/minizip-ng) and [libpng](https://www.libpng.org));
   - BMP (built-in);
   - PNM (built-in);
   - TGA (built-in);
+  - XBM (built-in);
   - QOI (built-in);
   - DICOM (built-in);
   - Farbfeld (built-in).
+- Support for non-image previews:
+  - Font: TTF/OTF/WOFF (via [FreeType](https://freetype.org));
+  - Video: preview in storyboard (via [FFMpeg](https://ffmpeg.org)).
 - Native support for Wayland and DRM output;
 - Gallery and viewer modes with slideshow;
 - Image animation support;
@@ -63,7 +67,7 @@ See full [documentation](USAGE.md) for details.
 
 The Swayimg configuration file is a Lua script. The full list of available
 functions is described in the [documentation](CONFIG.md) and in the
-[Lua source](extra/swayimg.lua) file.
+[Lua source](extra/swayimg.lua) file. Some tips and trick can be found [here](TIPS.md).
 
 [Example](extra/example.lua) of the configuration file is available after
 installation in `/usr/share/swayimg/example.lua`.

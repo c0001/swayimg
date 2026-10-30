@@ -26,14 +26,16 @@
 #endif
 #endif // PNG_APNG_SUPPORTED
 
+namespace {
+
 class ImageFormatPng : public ImageFormat {
 public:
-    ImageFormatPng()
+    ImageFormatPng() noexcept
         : ImageFormat(Priority::Highest, "png")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (png_sig_cmp(data.data, 0, data.size) != 0) {
             return nullptr;
@@ -44,6 +46,8 @@ public:
         if (!png.png || !png.info) {
             return nullptr;
         }
+
+        ImagePtr image = std::make_shared<Image>();
 
         // setup error handling
         if (setjmp(png_jmpbuf(png))) {
@@ -85,8 +89,6 @@ public:
 
         png_read_update_info(png, png);
 
-        ImagePtr image = std::make_shared<Image>();
-
         // decode image
 #ifdef PNG_APNG_SUPPORTED
         if (png_get_valid(png, png, PNG_INFO_acTL) &&
@@ -125,16 +127,20 @@ public:
             case PNG_COLOR_TYPE_GRAY_ALPHA:
                 image->format += "Grayscale+Alpha ";
                 break;
+            default:
+                break;
         }
         image->format += std::format("{}bit", bit_depth);
 
         return image;
     }
 
-    std::vector<uint8_t> encode(const Pixmap& pm) override
+    std::vector<uint8_t>
+    encode(const Pixmap& pm,
+           const std::unordered_map<std::string, std::string>& meta) override
     {
         // create encoder
-        PngObject png(false);
+        const PngObject png(false);
         if (!png.png || !png.info) {
             return {};
         }
@@ -156,6 +162,21 @@ public:
                      PNG_COLOR_TYPE_RGB_ALPHA, PNG_INTERLACE_NONE,
                      PNG_COMPRESSION_TYPE_DEFAULT, PNG_FILTER_TYPE_DEFAULT);
         png_set_bgr(png);
+
+#ifdef PNG_TEXT_SUPPORTED
+        // save meta info as text
+        if (!meta.empty()) {
+            std::vector<png_text> txt;
+            txt.reserve(meta.size());
+            for (const auto& [key, value] : meta) {
+                png_text pt {};
+                pt.key = const_cast<char*>(key.c_str());
+                pt.text = const_cast<char*>(value.c_str());
+                txt.emplace_back(pt);
+            }
+            png_set_text(png, png, txt.data(), txt.size());
+        }
+#endif // PNG_TEXT_SUPPORTED
 
         // encode png
         std::vector<uint8_t> data;
@@ -222,8 +243,8 @@ private:
             }
         }
 
-        operator png_struct*() { return png; }
-        operator png_info*() { return info; }
+        operator png_struct*() const { return png; }
+        operator png_info*() const { return info; }
 
         bool read_mode;
         png_struct* png = nullptr;
@@ -235,7 +256,7 @@ private:
      * @param pm pixmap to bind
      * @return array of pointers to pixmap data
      */
-    std::vector<png_bytep> bind_pixmap(Pixmap& pm) const
+    static std::vector<png_bytep> bind_pixmap(Pixmap& pm)
     {
         std::vector<png_bytep> pbind(pm.height(), nullptr);
         for (size_t i = 0; i < pm.height(); ++i) {
@@ -251,8 +272,8 @@ private:
      * @param frames image frames
      * @param index number of the frame to load
      */
-    void decode_frame(PngObject& png, std::vector<Image::Frame>& frames,
-                      const size_t index) const
+    static void decode_frame(PngObject& png, std::vector<Image::Frame>& frames,
+                             const size_t index)
     {
         // get frame params
         png_uint_32 width = 0;
@@ -302,7 +323,7 @@ private:
             } else if (index + 1 < frames.size()) {
                 const Pixmap& curr = frames[index].pm;
                 Pixmap& next = frames[index + 1].pm;
-                next.copy(curr, { 0, 0 });
+                next.copy(curr, { .x = 0, .y = 0 });
             }
         }
 
@@ -319,7 +340,7 @@ private:
         if (dispose == PNG_fcTL_DISPOSE_OP_NONE && index + 1 < frames.size()) {
             const Pixmap& curr = frames[index].pm;
             Pixmap& next = frames[index + 1].pm;
-            next.copy(curr, { 0, 0 });
+            next.copy(curr, { .x = 0, .y = 0 });
         }
     }
 
@@ -328,8 +349,8 @@ private:
      * @param png PNG decoder
      * @param frames image frames
      */
-    void decode_multiple(PngObject& png,
-                         std::vector<Image::Frame>& frames) const
+    static void decode_multiple(PngObject& png,
+                                std::vector<Image::Frame>& frames)
     {
         // allocate frames
         const png_uint_32 width = png_get_image_width(png, png);
@@ -356,7 +377,7 @@ private:
      * @param png PNG decoder
      * @param frames image frames
      */
-    void decode_single(PngObject& png, std::vector<Image::Frame>& frames) const
+    static void decode_single(PngObject& png, std::vector<Image::Frame>& frames)
     {
         const png_uint_32 width = png_get_image_width(png, png);
         const png_uint_32 height = png_get_image_height(png, png);
@@ -383,4 +404,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatPng format_png;
+ImageFormatPng format_png;
+
+} // anonymous namespace

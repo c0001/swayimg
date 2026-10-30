@@ -12,6 +12,7 @@
 
 #include <cassert>
 #include <cerrno>
+#include <climits>
 #include <ranges>
 
 #ifdef HAVE_INOTIFY
@@ -28,13 +29,15 @@ FsMonitor& FsMonitor::self()
 FsMonitor::~FsMonitor() {}
 void FsMonitor::initialize() {}
 void FsMonitor::add(const std::filesystem::path&) {}
+void FsMonitor::remove(const std::filesystem::path&) {}
+void FsMonitor::clear() {}
 void FsMonitor::handle_event(const inotify_event*) {}
 #else
 
 FsMonitor::~FsMonitor()
 {
     if (fd != -1) {
-        for (const auto& wd : std::views::keys(watch)) {
+        for (const auto& wd : std::views::keys(fds)) {
             inotify_rm_watch(fd, wd);
         }
         close(fd);
@@ -45,11 +48,11 @@ void FsMonitor::initialize()
 {
     assert(fd == -1);
 
-    fd = inotify_init1(IN_NONBLOCK);
+    fd = inotify_init1(IN_NONBLOCK | IN_CLOEXEC);
     if (fd == -1) {
         Log::error(errno, "Unable to initialize FS monitor");
     } else {
-        Application::self().add_fdpoll(fd, [this]() {
+        Application::self().add_fdpoll(fd, [this] {
             while (true) {
                 uint8_t buffer[PATH_MAX];
                 const ssize_t len = read(fd, buffer, sizeof(buffer));
@@ -81,15 +84,10 @@ void FsMonitor::add(const std::filesystem::path& path)
     assert(path.is_absolute());
 
     // check if file is already watched by its parent
-    if (std::filesystem::is_regular_file(path)) {
-        const std::filesystem::path& parent = path.parent_path();
-        const auto it =
-            std::find_if(watch.begin(), watch.end(), [&parent](const auto& it) {
-                return parent == it.second.parent_path();
-            });
-        if (it != watch.end()) {
-            return; // already watched
-        }
+    if (paths.contains(std::filesystem::is_regular_file(path)
+                           ? path.parent_path()
+                           : path)) {
+        return;
     }
 
     const int wd =
@@ -101,20 +99,41 @@ void FsMonitor::add(const std::filesystem::path& path)
         return;
     }
 
-    watch.insert(std::make_pair(wd, path));
+    fds.insert(std::make_pair(wd, path));
+    paths.insert(std::make_pair(path, wd));
+}
+
+void FsMonitor::remove(const std::filesystem::path& path)
+{
+    const auto it = paths.find(path);
+    if (it != paths.end()) {
+        inotify_rm_watch(fd, it->second);
+    }
+}
+
+void FsMonitor::clear()
+{
+    for (const auto& it : fds) {
+        inotify_rm_watch(fd, it.first);
+    }
 }
 
 void FsMonitor::handle_event(const inotify_event* event)
 {
-    if (event->mask & IN_IGNORED) {
-        // remove from the watch list
-        watch.erase(event->wd);
+    if (event->mask & IN_Q_OVERFLOW) {
+        // the event queue is full, some events were lost, wd is -1
+        Log::warning("FSMON: Event queue overflow, some changes were missed");
         return;
     }
 
-    const auto it = watch.find(event->wd);
-    assert(it != watch.end());
-    if (it == watch.end()) {
+    const auto it = fds.find(event->wd);
+    if (it == fds.end()) {
+        return; // event for a watch that was already removed
+    }
+
+    if (event->mask & IN_IGNORED) {
+        paths.erase(it->second);
+        fds.erase(it);
         return;
     }
 

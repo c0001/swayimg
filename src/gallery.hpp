@@ -9,9 +9,9 @@
 #include "layout.hpp"
 #include "threadpool.hpp"
 
-#include <deque>
 #include <mutex>
 #include <set>
+#include <unordered_map>
 
 class Gallery : public AppMode {
 public:
@@ -28,6 +28,7 @@ public:
      */
     static Gallery& self();
 
+    /** Constructor. */
     Gallery();
 
     /**
@@ -38,7 +39,14 @@ public:
     bool select(const Layout::Direction dir);
 
     /**
-     * Reload thumbnails
+     * Select another image at specified position.
+     * @param pt thumbnail coordinates within the window
+     * @return true if new image was selected
+     */
+    bool select(const Point& pt);
+
+    /**
+     * Reload thumbnails.
      */
     void reload();
 
@@ -52,7 +60,7 @@ public:
      * Set thumbnail size.
      * @param size new thumbnail size in pixels
      */
-    [[nodiscard]] inline size_t get_thumb_size() const
+    [[nodiscard]] size_t get_thumb_size() const
     {
         return layout.get_thumb_size();
     }
@@ -106,12 +114,6 @@ public:
     void set_window_color(const argb_t& color);
 
     /**
-     * Set mark icon color.
-     * @param color mark icon color
-     */
-    void set_mark_color(const argb_t& color);
-
-    /**
      * Enable/disable mouse hover selection.
      * @param enable flag to set
      */
@@ -145,14 +147,15 @@ public:
     void initialize() override;
     void activate(const ImageEntryPtr& entry, const Size& wnd) override;
     void deactivate() override;
-    ImageEntryPtr current_entry() override;
+    ImageEntryPtr get_current() override;
+    bool set_current(const ImageEntryPtr& entry) override;
     void window_resize(const Size& wnd) override;
     void window_redraw(Pixmap& wnd) override;
     void handle_mmove(const InputMouse& input, const Point& pos,
                       const Point& delta) override;
     void handle_pinch(const double scale_delta) override;
     void handle_imagelist(const ImageListEvent event,
-                          const ImageEntryPtr& entry) override;
+                          const std::vector<ImageEntryPtr>& entries) override;
 
 private:
     /**
@@ -163,14 +166,19 @@ private:
     void draw(const Layout::Thumbnail& tlay, Pixmap& wnd);
 
     /**
-     * Manage loading queue.
+     * Refresh view: clear and load thumbnails.
      */
-    void load_thumbnails();
+    void refresh();
 
     /**
-     * Remove unused thumbnails from the cache.
+     * Rebuild loading queue.
      */
-    void clear_thumbnails();
+    void requeue_loading();
+
+    /**
+     * Remove invisible thumbnails from the cache.
+     */
+    void clear_invisible();
 
     /**
      * Get thumbnail pixmap for specified image.
@@ -217,14 +225,8 @@ private:
     bool pstore_enable; ///< Use persistent storage for thumbnails
     std::filesystem::path pstore_path; ///< Persistent storage path
 
-    /** Thumbnail entry. */
-    struct ThumbEntry {
-        ImageEntryPtr entry;
-        Pixmap pm;
-    };
-    std::deque<ThumbEntry> cache;   ///< Thumbnails cache
-    std::set<ImageEntryPtr> queue;  ///< Loading queue
-    std::set<ImageEntryPtr> active; ///< Currently loading
+    std::unordered_map<ImageEntryPtr, Pixmap> thumbs; ///< Loaded thumbnails
+    std::set<ImageEntryPtr> crld_thumbs; ///< Currently loading thumbnails
 
     bool preload;      ///< Enable/disable preloading of invisible thumbnails
     size_t cache_size; ///< Max number of thumbnails in cache

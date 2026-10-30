@@ -16,14 +16,16 @@
 #include <cstring>
 #include <format>
 
+namespace {
+
 class ImageFormatExr : public ImageFormat {
 public:
-    ImageFormatExr()
+    ImageFormatExr() noexcept
         : ImageFormat(Priority::Low, "exr")
     {
     }
 
-    ImagePtr decode(const Data& data) override
+    [[nodiscard]] ImagePtr decode(const Data& data) const override
     {
         if (!check_signature(data, { 0x76, 0x2f, 0x31, 0x01 })) {
             return nullptr;
@@ -41,11 +43,17 @@ public:
             const int dx = box.min.x;
             const int dy = box.min.y;
 
-            Imf::Array2D<Imf::Rgba> pixels;
-            pixels.resizeErase(height, width);
+            if (width > ImageFormatExr::MAX_SIZE ||
+                height > ImageFormatExr::MAX_SIZE) {
+                return nullptr;
+            }
 
             // decode image
+            Imf::Array2D<Imf::Rgba> pixels(height, width);
             if (exr_header.hasTileDescription()) {
+                if (dx > 0 || dy > 0 || dx < -width || dy < -height) {
+                    return nullptr;
+                }
                 image_type = "tiled";
                 Imf::TiledRgbaInputFile tile_file(stream);
                 tile_file.setFrameBuffer(&pixels[-dy][-dx], 1, width);
@@ -54,8 +62,9 @@ public:
             } else {
                 image_type = "scanline";
                 Imf::RgbaInputFile rgba_file(stream);
-                rgba_file.setFrameBuffer(&pixels[0][0] - dx - dy * width, 1,
-                                         width);
+                rgba_file.setFrameBuffer(&pixels[0][0] - dx -
+                                             static_cast<int64_t>(dy) * width,
+                                         1, width);
                 rgba_file.readPixels(box.min.y, box.max.y);
             }
 
@@ -66,8 +75,8 @@ public:
             pm.create(Pixmap::ARGB, width, height);
 
             // put image to pixmap
-            for (size_t y = 0; y < pm.height(); ++y) {
-                for (size_t x = 0; x < pm.width(); ++x) {
+            for (int y = 0; y < height; ++y) {
+                for (int x = 0; x < width; ++x) {
                     argb_t& dst = pm.at(x, y);
                     const Imf::Rgba& clr = pixels[y][x];
                     dst.a = static_cast<uint8_t>(
@@ -98,6 +107,9 @@ public:
     }
 
 private:
+    /** Max image size. */
+    static constexpr int MAX_SIZE = 10000000;
+
     /** Memory input stream. */
     struct MemoryIStream : public Imf::IStream {
         MemoryIStream(const Data& raw_data)
@@ -108,6 +120,9 @@ private:
 
         bool read(char c[], int n) override
         {
+            if (n < 0) {
+                throw std::invalid_argument("Negative size");
+            }
             if (position + n > data.size) {
                 throw std::runtime_error("No more data");
             }
@@ -129,4 +144,6 @@ private:
 };
 
 // register format in factory
-static ImageFormatExr format_exr;
+ImageFormatExr format_exr;
+
+} // anonymous namespace

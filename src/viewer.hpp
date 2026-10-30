@@ -40,6 +40,13 @@ public:
         BottomRight,
     };
 
+    /** Automatic positioning. */
+    enum class AutoPos : uint8_t {
+        Free,
+        Center,
+        Follow,
+    };
+
     /** Background modes. */
     enum class Background : uint8_t {
         Mirror,
@@ -53,6 +60,7 @@ public:
      */
     static Viewer& self();
 
+    /** Constructor. */
     Viewer();
 
     /**
@@ -61,13 +69,6 @@ public:
      * @return true if image was loaded
      */
     bool open(const ImageList::Dir dir);
-
-    /**
-     * Load and switch to specified entry.
-     * @param from entry to load
-     * @return true if image was loaded
-     */
-    bool open(const ImageEntryPtr& entry);
 
     /**
      * Reload current image.
@@ -82,16 +83,16 @@ public:
     [[nodiscard]] ImagePtr current_image() const { return image; }
 
     /**
-     * Switch to next frame.
-     * @return current frame index
+     * Switch to specified frame.
+     * @param index frame index to activate.
      */
-    size_t next_frame();
+    void set_frame(const size_t index);
 
     /**
-     * Switch to previous frame.
-     * @return current frame index
+     * Get currently displayed frame index.
+     * @return frame index
      */
-    size_t prev_frame();
+    [[nodiscard]] size_t get_frame() const { return frame_index; }
 
     /**
      * Export current frame to PNG file.
@@ -197,6 +198,18 @@ public:
                               const argb_t& color2);
 
     /**
+     * Set focus area radius.
+     * @param radius focus area radius in pixels
+     */
+    void set_focus_radius(const size_t radius);
+
+    /**
+     * Set focus dimming factor.
+     * @param factor dimming factor (0=black, 1=transparent)
+     */
+    void set_focus_factor(const double factor);
+
+    /**
      * Set number of images to preload in a separate thread.
      * @param size number of images to preload
      */
@@ -218,41 +231,28 @@ public:
     void initialize() override;
     void activate(const ImageEntryPtr& entry, const Size& wnd) override;
     void deactivate() override;
-    ImageEntryPtr current_entry() override;
+    ImageEntryPtr get_current() override;
+    bool set_current(const ImageEntryPtr& entry) override;
     void window_resize(const Size& wnd) override;
     void window_redraw(Pixmap& wnd) override;
     void handle_mmove(const InputMouse& input, const Point& pos,
                       const Point& delta) override;
     void handle_pinch(const double scale_delta) override;
     void handle_imagelist(const ImageListEvent event,
-                          const ImageEntryPtr& entry) override;
+                          const std::vector<ImageEntryPtr>& entries) override;
 
 private:
-    /**
-     * Open next image file.
-     * @param dir next entry direction
-     * @param entry starting entry
-     * @return true if image was opened
-     */
-    bool switch_image(const ImageList::Dir dir, const ImageEntryPtr& entry);
-
     /**
      * Set current image.
      * @param img image instance to set as current
      */
     void set_image(const ImagePtr& img);
 
-    /**
-     * Switch to specified frame.
-     * @param index frame index to activate.
-     */
-    void set_frame(const size_t index);
-
     /** Type of text update. */
     enum class TextUpdate : uint8_t {
         All,   ///< Update all info
         Frame, ///< Update only frame index and size
-        Scale  ///< Update only scale info
+        Scale, ///< Update only scale info
     };
 
     /**
@@ -267,6 +267,16 @@ private:
     void fixup_position();
 
     /**
+     * Fix up image coordinate.
+     * @param pos origin position
+     * @param sz image size
+     * @param max_pos max position
+     * @retrun fixed position
+     */
+    static ssize_t fixup_position(const ssize_t pos, const size_t sz,
+                                  const size_t max_pos);
+
+    /**
      * Start preloader.
      */
     void preloader_start();
@@ -274,7 +284,13 @@ private:
     /**
      * Stop preloader.
      */
+
     void preloader_stop();
+
+    /**
+     * Preloader worker.
+     */
+    void preloader_work();
 
 private:
     /** Image cache. */
@@ -303,17 +319,19 @@ private:
     };
 
 public:
-    bool auto_center;    ///< Enable automatic image centering
     bool imagelist_loop; ///< Flag to loop image list
+
+    AutoPos auto_pos; ///< Automatic positioning
 
     std::variant<double, Scale> default_scale; ///< Default image scale
     Position default_pos;                      ///< Default image position
 
-private:
-    ImagePtr image; ///< Currently shown image
-    Point position; ///< Image position on the window
-    double scale;   ///< Current scale factor of the image
-    Size previmg;   ///< Size of previous image (used for "keep" scale mode)
+protected:
+    ImagePtr image;       ///< Currently shown image
+    Point position;       ///< Image position on the window
+    double scale { 1.0 }; ///< Current scale factor of the image
+
+    Size previmg; ///< Size of previous image (used for "keep" scale mode)
 
     Size window_size;                            ///< Window size in pixels
     std::variant<argb_t, Background> window_bkg; ///< Window background
@@ -327,6 +345,9 @@ private:
     bool animation;          ///< Flag to start animation automatically
     FdTimer animation_timer; ///< Animation timer
     size_t frame_index;      ///< Index of the currently displayed frame
+
+    size_t focus_radius; ///< Radius of focused area (0 to disable)
+    double focus_factor; ///< Dimming factor outside focus
 
     InputMouse drag; ///< Mouse state for dragging an image across the canvas
 

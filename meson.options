@@ -42,6 +42,12 @@ option(
     description: 'Enable JPEG XL format support',
 )
 option(
+    'krita',
+    type: 'feature',
+    value: 'auto',
+    description: 'Enable Krita format support',
+)
+option(
     'png',
     type: 'feature',
     value: 'auto',
@@ -77,6 +83,12 @@ option(
     value: 'auto',
     description: 'Enable WebP format support',
 )
+option(
+    'video',
+    type: 'feature',
+    value: 'auto',
+    description: 'Enable video storyboard support',
+)
 
 # EXIF support
 option(
@@ -108,6 +120,14 @@ option(
     type: 'feature',
     value: 'auto',
     description: 'Enable DRM (Direct Rendering Manager) support',
+)
+
+# Libabry used for Lua
+option(
+    'liblua',
+    type: 'string',
+    value: 'luajit',
+    description: 'Library used for Lua (lua or luajit)',
 )
 
 # extra files to install

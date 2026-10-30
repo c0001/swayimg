@@ -33,14 +33,17 @@ public:
     {
     }
 
-    ~WaylandObject()
+    ~WaylandObject() { free(); }
+
+    operator T*() const { return ptr; };
+
+    void free()
     {
         if (ptr) {
             destroy(ptr);
+            ptr = nullptr;
         }
     }
-
-    operator T*() const { return ptr; };
 
     fn_destroy destroy;
     T* ptr = nullptr;
@@ -61,6 +64,7 @@ struct WaylandDisplay : public WaylandObject<wl_display> {
     };
 };
 
+// NOLINTBEGIN(bugprone-macro-parentheses)
 /** Macro to declare wayland object with RAII. */
 #define WLOBJ_DECLARE(T)                                                    \
     struct WaylandObject##T : public WaylandObject<T> {                     \
@@ -83,6 +87,7 @@ struct WaylandDisplay : public WaylandObject<wl_display> {
                 wl_registry_bind(registry, name, &T##_interface, version)); \
         }                                                                   \
     }
+// NOLINTEND(bugprone-macro-parentheses)
 
 /** Wayland window buffer. */
 struct WaylandBuffer {
@@ -116,13 +121,13 @@ struct WaylandBuffer {
      * Get buffer width.
      * @return buffer width in pixels
      */
-    [[nodiscard]] inline size_t width() const { return pm.width(); }
+    [[nodiscard]] size_t width() const { return pm.width(); }
 
     /**
      * Get buffer height.
      * @return buffer height in pixels
      */
-    [[nodiscard]] inline size_t height() const { return pm.height(); }
+    [[nodiscard]] size_t height() const { return pm.height(); }
 
     /**
      * Get wayland buffer object.
@@ -191,6 +196,7 @@ private:
         WLOBJ_DECLARE(wl_data_device_manager) datadev_mgr;
         WLOBJ_DECLARE(wl_data_device) datadev;
         WLOBJ_DECLARE(wl_data_source) datasrc;
+        WLOBJ_DECLARE(wl_data_offer) dataoffer;
         WLOBJ_DECLARE(xdg_wm_base) xwmbase;
         WLOBJ_DECLARE(xdg_surface) xsurface;
         WLOBJ_DECLARE(xdg_toplevel) xtoplevel;
@@ -215,19 +221,24 @@ private:
 
     Xkb xkb; ///< X keyboard extension
 
+    uint32_t pointer_serial; ///< Current mouse serial from pointer enter
     CursorShape pointer_shape =
         Ui::CursorShape::Default; ///< Current mouse pointer shape
     InputMouse::mouse_btn_t mouse_buttons =
         InputMouse::NONE; ///< Currently pressed mouse buttons
     Point mouse_pos;      ///< Mouse coordinates
 
+    bool scroll_hires = false; ///< Scroll mode (hires/lores)
+    double scroll_v = 0;       ///< Pending vertical scroll
+    double scroll_h = 0;       ///< Pending horizontal scroll
+
     double pinch_scale; ///< Last pinch scale
 
 public:
-    InputMouse dnd;          ///< Mouse and key modifiers used for drag-and-drop
-    bool decoration = false; ///< Flag to use server side decoration
-    bool fullscreen = false; ///< Full screen mode
-    int32_t width = 1280;    ///< Window width
-    int32_t height = 720;    ///< Window height
-    uint32_t cursor_hide = 3000; ///< Timeout to hide cursor, 3 sec
+    InputMouse dnd;       ///< Mouse and key modifiers used for drag-and-drop
+    bool decoration;      ///< Flag to use server side decoration
+    bool fullscreen;      ///< Full screen mode
+    int32_t width;        ///< Window width
+    int32_t height;       ///< Window height
+    uint32_t cursor_hide; ///< Timeout to hide cursor, 3 sec
 };

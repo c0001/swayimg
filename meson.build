@@ -25,7 +25,12 @@ if version == '0.0.0'
             check: false,
         )
         if git_ver.returncode() == 0
-            version = git_ver.stdout().strip().substring(1)
+            version = git_ver.stdout().strip()
+            # drop the "v" of the tag, but not the first character of a bare hash
+            # (git describe has no tag to use in a clone without tags)
+            if version.startswith('v')
+                version = version.substring(1)
+            endif
         endif
     endif
 endif
@@ -33,9 +38,9 @@ endif
 # mandatory dependencies
 xkb = dependency('xkbcommon')
 fontconfig = dependency('fontconfig')
-freetype = dependency('freetype2')
+freetype = dependency('freetype2', version: '>=2.13.1')
 threads = dependency('threads')
-lua = dependency('luajit')
+lua = dependency(get_option('liblua'))
 
 # wayland support
 wl_protocols = []
@@ -94,13 +99,46 @@ jpeg = dependency('libjpeg', required: get_option('jpeg'))
 jp2 = dependency('libopenjp2', required: get_option('jp2'))
 jxl = dependency('libjxl', required: get_option('jxl'))
 jxl_threads = dependency('libjxl_threads', required: get_option('jxl'))
-png = dependency('libpng', required: get_option('png'))
+zip = dependency('minizip-ng', required: get_option('krita'))
+if get_option('krita').enabled() or get_option('png').enabled()
+  png = dependency('libpng', required: true)
+else
+  png = dependency('libpng', required: get_option('png'))
+endif
 rsvg = dependency('librsvg-2.0', version: '>=2.46', required: get_option('svg'))
 tiff = dependency('libtiff-4', required: get_option('tiff'))
 sixel = dependency('libsixel', required: get_option('sixel'))
 raw = dependency('libraw', required: get_option('raw'))
-webp = dependency('libwebp', required: get_option('webp'))
+# Krita format
+if zip.found() and png.found()
+    krita = declare_dependency(
+        dependencies: [zip, png],
+    )
+else
+    krita = dependency('', required: false)
+endif
+# WebP format
+webp_base = dependency('libwebp', required: get_option('webp'))
 webp_demux = dependency('libwebpdemux', required: get_option('webp'))
+if webp_base.found() and webp_demux.found()
+    webp = declare_dependency(
+        dependencies: [webp_base, webp_demux],
+    )
+else
+    webp = dependency('', required: false)
+endif
+# Video storyboard
+avformat = dependency('libavformat', version: '>=60.16.100', required: get_option('video'))
+avcodec = dependency('libavcodec', version: '>=60.31.102', required: get_option('video'))
+avutil = dependency('libavutil', version: '>=58.29.100', required: get_option('video'))
+swscale = dependency('libswscale', version: '>=7.5.100', required: get_option('video'))
+if avformat.found() and avcodec.found() and avutil.found() and swscale.found()
+    video = declare_dependency(
+        dependencies: [avformat, avcodec, avutil, swscale],
+    )
+else
+    video = dependency('', required: false)
+endif
 
 # hack to build "pkgconfigless" gif in FreeBSD
 cc = meson.get_compiler('c')
@@ -145,7 +183,9 @@ conf.set('HAVE_LIBRSVG', rsvg.found())
 conf.set('HAVE_LIBTIFF', tiff.found())
 conf.set('HAVE_LIBSIXEL', sixel.found())
 conf.set('HAVE_LIBRAW', raw.found())
-conf.set('HAVE_LIBWEBP', webp.found() and webp_demux.found())
+conf.set('HAVE_LIBWEBP', webp.found())
+conf.set('HAVE_KRITA', krita.found())
+conf.set('HAVE_VIDEO', video.found())
 conf.set_quoted('APP_VERSION', version)
 configure_file(output: 'buildconf.hpp', configuration: conf)
 
@@ -275,8 +315,10 @@ endif
 sources = [
     'src/application.cpp',
     'src/appmode.cpp',
+    'src/defaults.cpp',
     'src/fdevent.cpp',
     'src/font.cpp',
+    'src/formatfactory.cpp',
     'src/fsmonitor.cpp',
     'src/gallery.cpp',
     'src/geometry.cpp',
@@ -292,6 +334,7 @@ sources = [
     'src/slideshow.cpp',
     'src/text.cpp',
     'src/threadpool.cpp',
+    'src/urilist.cpp',
     'src/viewer.cpp',
     'src/xkb.cpp',
     'src/formats/bmp.cpp',
@@ -301,6 +344,7 @@ sources = [
     'src/formats/qoi.cpp',
     'src/formats/tga.cpp',
     'src/formats/ttf.cpp',
+    'src/formats/xbm.cpp',
     wl_protocols,
 ]
 
@@ -334,6 +378,9 @@ endif
 if jxl.found()
     sources += 'src/formats/jxl.cpp'
 endif
+if krita.found()
+    sources += 'src/formats/krita.cpp'
+endif
 if png.found()
     sources += 'src/formats/png.cpp'
 endif
@@ -349,8 +396,11 @@ endif
 if raw.found()
     sources += 'src/formats/raw.cpp'
 endif
-if webp.found() and webp_demux.found()
+if webp.found()
     sources += 'src/formats/webp.cpp'
+endif
+if video.found()
+    sources += 'src/formats/video.cpp'
 endif
 
 dependencies = [
@@ -374,13 +424,14 @@ dependencies = [
     jp2,
     jxl,
     jxl_threads,
+    krita,
     png,
     raw,
     rsvg,
     sixel,
     tiff,
     webp,
-    webp_demux,
+    video,
 ]
 
 executable(
@@ -398,13 +449,18 @@ if get_option('tests').enabled()
         'swayimg_test',
         sources + [
             'test/color_test.cpp',
+            'test/fdevent_test.cpp',
             'test/geometry_test.cpp',
             'test/image_test.cpp',
+            'test/imageformat_test.cpp',
             'test/imagelist_test.cpp',
             'test/input_test.cpp',
             'test/layout_test.cpp',
+            'test/lockable_test.cpp',
             'test/luaengine_test.cpp',
             'test/pixmap_test.cpp',
+            'test/threadpool_test.cpp',
+            'test/urilist_test.cpp',
         ],
         include_directories: ['src', 'src/external'],
         dependencies: dependencies + gtest,

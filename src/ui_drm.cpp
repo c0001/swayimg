@@ -143,7 +143,8 @@ bool UiDrm::initialize()
 
     // create frame buffers
     for (auto& it : fb) {
-        if (!it.create(fd, { mode.hdisplay, mode.vdisplay })) {
+        const Size sz { .width = mode.hdisplay, .height = mode.vdisplay };
+        if (!it.create(fd, sz)) {
             return false;
         }
     }
@@ -188,11 +189,11 @@ void UiDrm::commit_surface()
     }
 }
 
-bool UiDrm::drm_open(const std::filesystem::path& path, bool silent)
+bool UiDrm::drm_open(const std::filesystem::path& path, const bool silent)
 {
     assert(fd == -1);
 
-    fd = open(path.c_str(), O_RDWR);
+    fd = open(path.c_str(), O_RDWR | O_CLOEXEC);
 
     if (fd == -1) {
         if (!silent) {
@@ -213,7 +214,7 @@ bool UiDrm::drm_open(const std::filesystem::path& path, bool silent)
     return fd != -1;
 }
 
-drmModeConnectorPtr UiDrm::get_connector(drmModeResPtr resources) const
+drmModeConnectorPtr UiDrm::get_connector(const drmModeResPtr& resources) const
 {
     for (int i = 0; i < resources->count_connectors; ++i) {
         drmModeConnectorPtr conn =
@@ -245,8 +246,8 @@ drmModeConnectorPtr UiDrm::get_connector(drmModeResPtr resources) const
     return nullptr;
 }
 
-uint32_t UiDrm::get_crtc(drmModeResPtr resources,
-                         drmModeConnectorPtr connector) const
+uint32_t UiDrm::get_crtc(const drmModeResPtr& resources,
+                         const drmModeConnectorPtr& connector) const
 {
     for (int i = 0; i < connector->count_encoders; ++i) {
         drmModeEncoderPtr enc = drmModeGetEncoder(fd, connector->encoders[i]);
@@ -263,7 +264,7 @@ uint32_t UiDrm::get_crtc(drmModeResPtr resources,
     return 0;
 }
 
-drmModeModeInfoPtr UiDrm::get_mode(drmModeConnectorPtr connector) const
+drmModeModeInfoPtr UiDrm::get_mode(const drmModeConnectorPtr& connector) const
 {
     if (width && height) {
         for (int i = 0; i < connector->count_modes; ++i) {

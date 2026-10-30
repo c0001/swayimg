@@ -7,6 +7,7 @@
 #include "pixmap.hpp"
 
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <memory>
 #include <string>
@@ -14,27 +15,30 @@
 
 /** Image entry. */
 struct ImageEntry {
+    size_t index = std::numeric_limits<size_t>::max(); ///< Index in image list
     std::filesystem::path path; ///< Path to the image file
-    std::time_t mtime;          ///< File modification time
-    size_t size;                ///< Size of the image file
-    size_t index;               ///< Image index in image list
-    bool mark;                  ///< Marked image flag
-
-    /**
-     * Remove entry (mark it as invalid).
-     */
-    void remove();
-
-    /**
-     * Check if the entry is valid.
-     * @return true if image entry valid
-     */
-    operator bool() const;
+    std::time_t mtime = 0;      ///< File modification time
+    size_t size = 0;            ///< Size of the image file
+    bool mark = false;          ///< Marked image flag
+    bool removed = false;       ///< State, true if removed from image list
 
     // File name used for image, that is read from stdin through pipe
     static constexpr const char* SRC_STDIN = "stdin://";
     // Special prefix used to load images from external command output
     static constexpr const char* SRC_EXEC = "exec://";
+
+    /**
+     * Check if entry has a special source.
+     * @return true if path starts with stdin:// or exec://
+     */
+    [[nodiscard]] bool is_special() const { return is_special(path); }
+
+    /**
+     * Check if path is a special source.
+     * @param path path to check for special source format
+     * @return true if path starts with stdin:// or exec://
+     */
+    static bool is_special(const std::string& path);
 };
 
 using ImageEntryPtr = std::shared_ptr<ImageEntry>;
@@ -68,7 +72,7 @@ public:
      * Rotate image.
      * @param angle rotation angle (only 90, 180, or 270)
      */
-    virtual void rotate(size_t angle);
+    virtual void rotate(const size_t angle);
 
 public:
     /** Image frame. */
